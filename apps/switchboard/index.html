@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switchboard — switch-accessible phrase board</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --line: #c9c9c2;
+    --accent: #0b57d0;
+    --scan: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    max-width: 720px;
+    padding: 16px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: #555; margin: 0 0 16px; font-size: 0.95rem; }
+  button {
+    font: inherit;
+    min-height: 48px;
+    min-width: 48px;
+    padding: 8px 14px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--ink); }
+  /* One visual language for keyboard focus and scan highlight. */
+  button:focus-visible, .scan-item {
+    outline: 4px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .scan-item { outline-color: var(--scan); }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    margin: 0 0 10px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+  }
+  .row.scan-row { border-color: var(--scan); background: #fbeae9; }
+  .row-label {
+    flex-basis: 100%;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #666;
+  }
+  #message {
+    min-height: 56px;
+    padding: 12px;
+    margin: 0 0 12px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    font-size: 1.25rem;
+  }
+  #message:empty::before { content: "Message appears here…"; color: #999; }
+  .typebar { display: flex; gap: 8px; margin: 16px 0; }
+  .typebar input {
+    flex: 1;
+    font: inherit;
+    min-height: 48px;
+    padding: 8px 12px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+  }
+  .typebar input:focus-visible { outline: 4px solid var(--accent); outline-offset: 2px; }
+  #status { min-height: 1.5em; font-weight: 600; color: var(--scan); }
+  #log { list-style: none; padding: 0; margin: 8px 0; }
+  #log li {
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #log .meta { color: #777; font-size: 0.85rem; white-space: nowrap; }
+  footer { margin-top: 24px; font-size: 0.9rem; color: #555; }
+  label { font-size: 0.95rem; }
+  select { font: inherit; min-height: 40px; }
+</style>
+</head>
+<body>
+<h1>Switchboard</h1>
+<p class="sub">A phrase board you can drive with one switch. Fully operable by
+keyboard, iOS/macOS Switch Control, or the built-in scan simulator below.</p>
+
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="message" aria-label="Current message" aria-live="polite"></div>
+
+<div class="row" data-scan data-label="Actions">
+  <span class="row-label">Actions</span>
+  <button data-action="say">🔊 Say it</button>
+  <button data-action="log">Log it</button>
+  <button data-action="undo">Undo word</button>
+  <button data-action="clear">Clear</button>
+</div>
+<div class="row" data-scan data-label="Basics">
+  <span class="row-label">Basics</span>
+  <button data-phrase>Yes</button>
+  <button data-phrase>No</button>
+  <button data-phrase>Help</button>
+  <button data-phrase>Wait</button>
+  <button data-phrase>Thank you</button>
+</div>
+<div class="row" data-scan data-label="Needs">
+  <span class="row-label">Needs</span>
+  <button data-phrase>Water</button>
+  <button data-phrase>Food</button>
+  <button data-phrase>Rest</button>
+  <button data-phrase>Pain</button>
+  <button data-phrase>Bathroom</button>
+</div>
+<div class="row" data-scan data-label="Social">
+  <span class="row-label">Social</span>
+  <button data-phrase>Hello</button>
+  <button data-phrase>Goodbye</button>
+  <button data-phrase>I'm okay</button>
+  <button data-phrase>How are you?</button>
+  <button data-phrase>I love you</button>
+</div>
+
+<div class="typebar">
+  <input id="freetext" type="text" aria-label="Type a message"
+         placeholder="Or type here (keyboard users)…">
+  <button id="addtext">Add</button>
+</div>
+
+<div class="row">
+  <button id="scanToggle">▶ Start scanning (Space = switch, Esc = stop)</button>
+  <label>Speed
+    <select id="scanSpeed" aria-label="Scan speed">
+      <option value="1600">Slow</option>
+      <option value="1100" selected>Medium</option>
+      <option value="700">Fast</option>
+    </select>
+  </label>
+</div>
+
+<h2 style="font-size:1.1rem">Log</h2>
+<ol id="log"></ol>
+
+<footer>Everything stays on this device (localStorage). No account, no server.</footer>
+
+<script>
+"use strict";
+/* ---- inputsource mirror (see packages/inputsource) ----------------------
+   All committed messages become a RawExpression and flow through ONE sink.
+   The renderer never branches on modality — that's the whole discipline. */
+const normalize = (t) => t.replace(/\s+/g, " ").trim();
+const textInput = {
+  modality: "text",
+  submit(text) {
+    const expr = { modality: this.modality, payload: normalize(text), confidence: 1, ts: Date.now() };
+    if (expr.payload) onExpression(expr);
+    return expr;
+  },
+};
+
+/* ---- log ---------------------------------------------------------------- */
+const LOG_KEY = "switchboard.log.v1";
+let entries = [];
+try { entries = JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { entries = []; }
+
+function onExpression(expr) {
+  entries.unshift(expr);
+  entries = entries.slice(0, 200);
+  localStorage.setItem(LOG_KEY, JSON.stringify(entries));
+  renderLog();
+}
+
+function renderLog() {
+  const ol = document.getElementById("log");
+  ol.innerHTML = "";
+  for (const e of entries) {
+    const li = document.createElement("li");
+    const text = document.createElement("span");
+    text.textContent = e.payload;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = `${e.modality} · ${new Date(e.ts).toLocaleTimeString()}`;
+    li.append(text, meta);
+    ol.append(li);
+  }
+}
+renderLog();
+
+/* ---- message composition ------------------------------------------------ */
+const messageEl = document.getElementById("message");
+const statusEl = document.getElementById("status");
+let words = [];
+
+function renderMessage() { messageEl.textContent = words.join(" "); }
+function say(text) {
+  if ("speechSynthesis" in window && text) {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  }
+}
+
+function activate(btn) {
+  if (btn.dataset.phrase !== undefined) {
+    words.push(btn.textContent);
+    renderMessage();
+    return;
+  }
+  const msg = words.join(" ");
+  switch (btn.dataset.action) {
+    case "say": say(msg); textInput.submit(msg); words = []; break;
+    case "log": textInput.submit(msg); words = []; break;
+    case "undo": words.pop(); break;
+    case "clear": words = []; break;
+  }
+  renderMessage();
+}
+
+document.querySelectorAll("[data-phrase], [data-action]").forEach((btn) =>
+  btn.addEventListener("click", () => activate(btn))
+);
+
+const freetext = document.getElementById("freetext");
+function addTyped() {
+  textInput.submit(freetext.value);
+  freetext.value = "";
+}
+document.getElementById("addtext").addEventListener("click", addTyped);
+freetext.addEventListener("keydown", (e) => { if (e.key === "Enter") addTyped(); });
+
+/* ---- single-switch scan simulator ---------------------------------------
+   Two-stage scanning, the same pattern iOS Switch Control uses:
+   stage 1 highlights rows; a switch press enters the row; stage 2 highlights
+   items; a press activates. Two full item loops with no press return to rows.
+   The one switch = Space (or Enter). Esc stops. */
+const rows = [...document.querySelectorAll("[data-scan]")];
+const scanToggle = document.getElementById("scanToggle");
+const speedSel = document.getElementById("scanSpeed");
+
+const scan = { active: false, stage: "rows", row: 0, item: 0, loops: 0, timer: null };
+
+function clearHighlights() {
+  rows.forEach((r) => r.classList.remove("scan-row"));
+  document.querySelectorAll(".scan-item").forEach((b) => b.classList.remove("scan-item"));
+}
+
+function tick() {
+  clearHighlights();
+  if (scan.stage === "rows") {
+    scan.row = (scan.row + 1) % rows.length;
+    rows[scan.row].classList.add("scan-row");
+    statusEl.textContent = `Scanning rows: ${rows[scan.row].dataset.label}`;
+  } else {
+    const items = rows[scan.row].querySelectorAll("button");
+    scan.item = (scan.item + 1) % items.length;
+    if (scan.item === 0 && ++scan.loops >= 2) { // give up, back to row scan
+      scan.stage = "rows";
+      statusEl.textContent = "Back to row scanning";
+      return;
+    }
+    rows[scan.row].classList.add("scan-row");
+    items[scan.item].classList.add("scan-item");
+    statusEl.textContent = `Item: ${items[scan.item].textContent}`;
+  }
+}
+
+function press() {
+  if (scan.stage === "rows") {
+    scan.stage = "items";
+    scan.item = -1;
+    scan.loops = 0;
+  } else {
+    const items = rows[scan.row].querySelectorAll("button");
+    if (scan.item >= 0) activate(items[scan.item]);
+    scan.stage = "rows";
+  }
+  restartTimer();
+  tick();
+}
+
+function restartTimer() {
+  clearInterval(scan.timer);
+  scan.timer = setInterval(tick, Number(speedSel.value));
+}
+
+function startScan() {
+  scan.active = true;
+  scan.stage = "rows";
+  scan.row = -1;
+  scanToggle.textContent = "⏹ Stop scanning (Esc)";
+  restartTimer();
+  tick();
+}
+
+function stopScan() {
+  scan.active = false;
+  clearInterval(scan.timer);
+  clearHighlights();
+  scanToggle.textContent = "▶ Start scanning (Space = switch, Esc = stop)";
+  statusEl.textContent = "";
+}
+
+scanToggle.addEventListener("click", () => (scan.active ? stopScan() : startScan()));
+speedSel.addEventListener("change", () => { if (scan.active) restartTimer(); });
+
+document.addEventListener("keydown", (e) => {
+  if (!scan.active) return;
+  if (e.key === "Escape") { stopScan(); return; }
+  if (e.key === " " || e.key === "Enter") {
+    e.preventDefault(); // the single switch
+    press();
+  }
+});
+</script>
+</body>
+</html>
