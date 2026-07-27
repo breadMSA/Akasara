@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akasara.dev/spec/0.1/capability.schema.json",
+  "title": "ASE-0.1 capability descriptor",
+  "type": "object",
+  "required": ["ase_version", "vendor", "model", "firmware", "tiers", "signal", "transport"],
+  "additionalProperties": true,
+  "properties": {
+    "ase_version": { "const": "0.1" },
+    "vendor": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "firmware": { "type": "string", "minLength": 1 },
+    "tiers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["t0", "t1", "t2", "t3"] },
+      "contains": { "const": "t1" }
+    },
+    "profiles": { "type": "array", "items": { "type": "string" } },
+    "signal": {
+      "type": "object",
+      "required": ["kind", "channels", "montage", "sample_rate_hz"],
+      "properties": {
+        "kind": { "enum": ["semg", "eeg", "ecog", "spike", "eog", "imu", "mixed", "other"] },
+        "channels": { "type": "integer", "minimum": 1 },
+        "sample_rate_hz": { "type": "number", "exclusiveMinimum": 0 },
+        "montage": {
+          "type": "object",
+          "required": ["system", "site", "side", "arrangement", "reference"],
+          "properties": {
+            "system": { "enum": ["ase.eeg.1020.v1", "ase.limb.v1", "ase.face.v1", "ase.opaque.v1"] },
+            "site": { "type": "string", "minLength": 1 },
+            "side": { "enum": ["left", "right", "midline", "bilateral", "n/a"] },
+            "arrangement": { "enum": ["circumferential", "linear", "grid", "scattered", "single"] },
+            "reference": { "type": "string", "minLength": 1 },
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["ch"],
+                "properties": {
+                  "ch": { "type": "integer", "minimum": 0 },
+                  "label": { "type": "string", "description": "ase.eeg.1020.v1" },
+                  "muscle": { "type": "string", "description": "ase.face.v1" },
+                  "angle_deg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360, "description": "ase.limb.v1" },
+                  "axial_mm": { "type": "number", "description": "ase.limb.v1" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "selftest": {
+      "type": "object",
+      "required": ["input", "expected", "tolerance"],
+      "description": "R-5.7 — production T1 transform over ase.selftest.v1",
+      "properties": {
+        "input": { "const": "ase.selftest.v1" },
+        "expected": { "type": "array", "minItems": 1, "items": { "type": "number" } },
+        "tolerance": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "t1": {
+      "type": "object",
+      "required": ["feature_space", "dim", "window_ms", "stride_ms", "producer", "documentation"],
+      "properties": {
+        "feature_space": { "type": "string", "minLength": 3 },
+        "dim": { "type": "integer", "minimum": 1 },
+        "window_ms": { "type": "number", "exclusiveMinimum": 0 },
+        "stride_ms": { "type": "number", "exclusiveMinimum": 0 },
+        "producer": { "enum": ["dsp", "model"] },
+        "adaptive": { "type": "boolean", "default": false },
+        "non_adaptive_mode": { "type": "boolean" },
+        "documentation": { "type": "string", "minLength": 1 },
+        "latency_typ_ms": { "type": "number" },
+        "latency_max_ms": { "type": "number" }
+      }
+    },
+    "previous_feature_space": {
+      "type": "string",
+      "description": "R-7.5.1 — feature space still selectable after a change; required on any firmware that changed t1.feature_space"
+    },
+    "don_count": { "type": "integer", "minimum": 0 },
+    "transport": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "requires_account": { "type": "boolean" },
+    "requires_network": { "type": "boolean" },
+    "developer_gate": {
+      "type": "boolean",
+      "description": "true if T1 access is limited to an approved-developer programme; conformance requires false"
+    },
+    "terms": {
+      "type": "object",
+      "properties": {
+        "cross_user_processing_permitted": { "type": "boolean" },
+        "url": { "type": "string" }
+      }
+    }
+  }
+}

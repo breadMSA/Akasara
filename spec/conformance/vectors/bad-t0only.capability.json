@@ -1,0 +1,31 @@
+{
+  "ase_version": "0.1",
+  "vendor": "example",
+  "model": "band-2",
+  "firmware": "3.4.1",
+  "tiers": [
+    "t0"
+  ],
+  "profiles": [],
+  "signal": {
+    "kind": "semg",
+    "channels": 16,
+    "sample_rate_hz": 2000,
+    "montage": {
+      "system": "ase.opaque.v1",
+      "site": "forearm",
+      "side": "right",
+      "arrangement": "circumferential",
+      "reference": "differential-adjacent"
+    }
+  },
+  "transport": [
+    "https://api.example.com/v1/gestures"
+  ],
+  "requires_account": true,
+  "requires_network": true,
+  "developer_gate": true,
+  "terms": {
+    "url": "https://example.com/terms"
+  }
+}

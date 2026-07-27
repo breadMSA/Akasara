@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akasara.dev/spec/0.1/frame.schema.json",
+  "title": "ASE-0.1 T1 feature frame",
+  "type": "object",
+  "required": ["tier", "t_mono_ns", "t_wall_ms", "session_id", "seq", "feature_space", "values", "quality"],
+  "additionalProperties": true,
+  "properties": {
+    "tier": { "const": "t1" },
+    "t_mono_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "monotonic device clock at END of analysis window"
+    },
+    "t_wall_ms": { "type": "integer", "minimum": 0 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "feature_space": { "type": "string", "minLength": 3 },
+    "values": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "number" }
+    },
+    "quality": {
+      "oneOf": [
+        { "type": "number", "minimum": 0, "maximum": 1 },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      ],
+      "description": "measured contact/impedance adequacy; NOT classifier confidence"
+    },
+    "adapt_state": {
+      "type": "string",
+      "description": "required when the exported feature is per-user adaptive"
+    },
+    "anchor": {
+      "type": "object",
+      "description": "present only under profile akasara.align.v1",
+      "required": ["schedule_id", "item", "t_stim_mono_ns", "timing_err_ms"],
+      "properties": {
+        "schedule_id": { "type": "string" },
+        "item": { "type": "string" },
+        "t_stim_mono_ns": { "type": "integer" },
+        "timing_err_ms": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

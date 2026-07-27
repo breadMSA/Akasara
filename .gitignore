@@ -5,3 +5,6 @@ __pycache__/
 
 # private research repo — never in the public tree
 research/
+
+# private partner-facing atlas (embeds research numbers + Evosub internals)
+hub-explorer/
