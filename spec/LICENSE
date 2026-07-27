@@ -1,0 +1,30 @@
+ASE — Akasara Signal Export
+Specification text: Copyright (c) 2026 breadMSA
+
+The specification text in this directory (ASE-0.1.md, README.md, and any future
+versioned specification documents) is licensed under the
+
+    Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+    https://creativecommons.org/licenses/by/4.0/
+
+You are free to share and adapt this material for any purpose, including
+commercially, provided you give appropriate credit, link to the licence, and
+indicate if changes were made. You may not suggest the licensor endorses you or
+your use.
+
+Reference code and machine-readable artifacts (conformance/, schema/) are NOT
+covered by this licence. They are licensed under Apache-2.0; see LICENSE-CODE.
+
+PATENT COMMITMENT
+-----------------
+Implementing this specification requires no patent licence from the editor. The
+royalty-free, irrevocable patent commitment in §12.2 of ASE-0.1.md applies to
+every implementer without registration, fee, or contact, and is not conditioned
+on any profile licence. Its only carve-out is defensive suspension against a
+party that asserts a patent claim against an ASE implementation.
+
+NO WARRANTY
+-----------
+Provided "as is", without warranty of any kind. ASE conformance is not a safety,
+security, medical, or regulatory certification.

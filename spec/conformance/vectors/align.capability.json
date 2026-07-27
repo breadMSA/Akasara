@@ -113,7 +113,15 @@
     "adaptive": false,
     "documentation": "https://example.com/ase/tdfeat-v3",
     "latency_typ_ms": 12,
-    "latency_max_ms": 28
+    "latency_max_ms": 28,
+    "lossless_encodings": [
+      "f32"
+    ]
+  },
+  "clock": {
+    "rtc": false,
+    "mono_epoch": "boot",
+    "drift_ppm_max": 40
   },
   "selftest": {
     "input": "ase.selftest.v1",
@@ -131,8 +139,22 @@
   },
   "don_count": 41,
   "transport": [
-    "ws://localhost:7654",
-    "usb-cdc"
+    {
+      "uri": "usb-cdc",
+      "encodings": [
+        "abf",
+        "json"
+      ],
+      "max_sustained_kbps": 8000
+    },
+    {
+      "uri": "ble://0001cd2c-3660-4e38-98ea-18dca6f5b514",
+      "encodings": [
+        "abf"
+      ],
+      "phy": "2M",
+      "max_sustained_kbps": 250
+    }
   ],
   "requires_account": false,
   "requires_network": false,

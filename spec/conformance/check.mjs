@@ -14,6 +14,7 @@
 
 import { readFileSync } from "node:fs";
 import { compareSelftest } from "./selftest.mjs";
+import { frameBytes } from "./abf.mjs";
 
 const results = [];
 const pass = (id, msg) => results.push({ ok: true, id, msg });
@@ -88,6 +89,64 @@ function checkMontage(sig) {
   pass("R-4.2", `montage ${m.system} ${m.site}/${m.side}, ${pos.length} positions — comparable`);
 }
 
+// ---------------------------------------------------------------- §4.3 clock
+function checkClock(cap) {
+  const c = cap.clock;
+  if (!c) return fail("R-4.3", "no clock block; a host cannot tell whether t_wall_ms is meaningful");
+  if (typeof c.rtc !== "boolean") fail("R-4.3", "clock.rtc must be stated true or false");
+  if (!["boot", "session"].includes(c.mono_epoch)) {
+    fail("R-4.3", `clock.mono_epoch "${c.mono_epoch}" invalid; a Unix-epoch ns clock exceeds JSON's exact integer range`);
+  }
+  if (c.drift_ppm_max === undefined) warn("R-4.3", "clock.drift_ppm_max not declared; hosts must assume the worst");
+  if (typeof c.rtc === "boolean" && ["boot", "session"].includes(c.mono_epoch)) {
+    pass("R-4.3", `clock declared: rtc=${c.rtc}, mono epoch ${c.mono_epoch}`);
+  }
+}
+
+// ------------------------------------------------- §4.4 / §7.2 transport feasibility
+function checkTransports(cap, t1) {
+  const list = cap.transport ?? [];
+  if (list.some((t) => typeof t === "string")) {
+    return fail("R-4.4", "transport[] entries are bare strings; 0.1 requires {uri, encodings, max_sustained_kbps}");
+  }
+  for (const t of list) {
+    for (const field of ["uri", "encodings", "max_sustained_kbps"]) {
+      if (t[field] === undefined) fail("R-4.4", `transport ${t.uri ?? "?"} missing ${field}`);
+    }
+  }
+  if (!t1 || !t1.dim || !t1.stride_ms) return;
+
+  const rate = 1000 / t1.stride_ms;
+  const channels = cap.signal?.channels ?? 0;
+  const jsonBytes = 110 + t1.dim * 8; // measured overhead of the §5 JSON shape
+  const best = { kbps: Infinity, uri: null, enc: null };
+
+  for (const t of list) {
+    for (const enc of t.encodings ?? []) {
+      const bytes = enc === "abf"
+        ? frameBytes({ dim: t1.dim, venc: "f32", channels, perChannelQuality: channels > 0 })
+        : jsonBytes;
+      const need = (bytes * rate * 8) / 1000;
+      if (need <= t.max_sustained_kbps && need < best.kbps) {
+        Object.assign(best, { kbps: need, uri: t.uri, enc });
+      }
+    }
+  }
+  if (best.uri) {
+    pass("R-7.2", `live rate ${rate.toFixed(0)} Hz × dim ${t1.dim} fits ${best.uri} as ${best.enc} (${best.kbps.toFixed(0)} kbps)`);
+  } else {
+    const cheapest = Math.min(
+      ...list.flatMap((t) => (t.encodings ?? []).map((enc) => {
+        const bytes = enc === "abf"
+          ? frameBytes({ dim: t1.dim, venc: "f32", channels, perChannelQuality: channels > 0 })
+          : jsonBytes;
+        return (bytes * rate * 8) / 1000;
+      }))
+    );
+    fail("R-7.2", `no declared transport sustains the live rate: needs ${cheapest.toFixed(0)} kbps at ${rate.toFixed(0)} Hz × dim ${t1.dim}, best declared capacity is ${Math.max(...list.map((t) => t.max_sustained_kbps ?? 0))} kbps`);
+  }
+}
+
 // ---------------------------------------------------------------- §5.7 self-test
 function checkSelftest(cap, actual) {
   const st = cap.selftest;
@@ -145,7 +204,9 @@ function compareVersions(a, b) {
   if (!spaceSame) {
     const tiersLost = (a.tiers ?? []).filter((t) => !(b.tiers ?? []).includes(t));
     if (tiersLost.length) fail("R-7.5", `update removed tier(s): ${tiersLost.join(", ")}`);
-    const transLost = (a.transport ?? []).filter((t) => !(b.transport ?? []).includes(t));
+    const uris = (cap) => (cap.transport ?? []).map((t) => (typeof t === "string" ? t : t.uri));
+    const after = new Set(uris(b));
+    const transLost = uris(a).filter((u) => !after.has(u));
     if (transLost.length) fail("R-7.5", `update removed transport(s): ${transLost.join(", ")}`);
     if (b.previous_feature_space !== a.t1?.feature_space) {
       fail("R-7.5.1", "new firmware does not declare previous_feature_space; the refit window is unverifiable");
@@ -156,8 +217,8 @@ function compareVersions(a, b) {
 // ---------------------------------------------------------------- §4, §7
 function checkCapability(cap) {
   const tiers = cap.tiers ?? [];
-  if (tiers.includes("t1")) pass("R-3", "T1 declared");
-  else fail("R-3", "T1 is not in tiers[]; T0-only export is not ASE-Core conformant");
+  if (tiers.includes("t1")) pass("R-3.1", "T1 declared");
+  else fail("R-3.1", "T1 is not in tiers[]; T0-only export is not ASE-Core conformant");
 
   for (const field of ["vendor", "model", "firmware"]) {
     if (!cap[field]) fail("R-4.1", `capability missing ${field}`);
@@ -165,6 +226,7 @@ function checkCapability(cap) {
   if (!Array.isArray(cap.transport) || cap.transport.length === 0) {
     fail("R-4.1", "capability declares no transport");
   }
+  checkClock(cap);
 
   const sig = cap.signal ?? {};
   if (sig.kind && sig.channels > 0 && sig.sample_rate_hz > 0) {
@@ -192,14 +254,17 @@ function checkCapability(cap) {
     }
   }
 
+  checkTransports(cap, t1);
+
   // §7 — access, locality, rights. Checked for every device, including one that
   // fails §3: a T0-only device's terms are exactly what needs to be on record.
   if (cap.requires_network === true) fail("R-7.1", "T1 export requires network; local interface is mandatory");
   else pass("R-7.1", "no network required for export");
   if (cap.requires_account === true) fail("R-7.1", "T1 export requires an account");
-  const local = (cap.transport ?? []).some((t) =>
-    /^(usb|ble|serial|loopback)/i.test(t) || /(localhost|127\.0\.0\.1)/.test(t)
-  );
+  const local = (cap.transport ?? []).some((t) => {
+    const uri = typeof t === "string" ? t : t.uri ?? "";
+    return /^(usb|ble|serial|loopback)/i.test(uri) || /(localhost|127\.0\.0\.1)/.test(uri);
+  });
   if (local) pass("R-7.1", "at least one local transport");
   else fail("R-7.1", "no local transport (USB / BLE / loopback) among transports");
 
@@ -227,20 +292,26 @@ function checkFrames(cap, allFrames, t1) {
   }
 
   const dim = t1?.dim;
+  const channels = cap.signal?.channels;
+  const hasRtc = cap.clock?.rtc;
   const declaredSpace = t1?.feature_space;
   const spaces = new Set();
   const sessions = new Map();
   let monoOk = true, seqOk = true, dimOk = true, qualityOk = true, finiteOk = true;
-  let adaptMissing = false;
+  let adaptMissing = false, wallMissing = false, wallInvented = false, monoRange = true;
+  let qualityLenOk = true;
   let lastMono = -Infinity, gaps = 0;
 
   frames.forEach((f, i) => {
     const at = `frame ${i}`;
-    for (const field of ["t_mono_ns", "t_wall_ms", "session_id", "seq", "feature_space", "values", "quality"]) {
+    for (const field of ["t_mono_ns", "session_id", "seq", "feature_space", "values", "quality"]) {
       if (f[field] === undefined) {
         fail("R-5.1", `${at}: required field ${field} missing`);
       }
     }
+    if (hasRtc === true && f.t_wall_ms === undefined) wallMissing = true;
+    if (hasRtc === false && f.t_wall_ms !== undefined) wallInvented = true;
+    if (f.t_mono_ns > Number.MAX_SAFE_INTEGER) monoRange = false;
     spaces.add(f.feature_space);
 
     if (!Number.isInteger(f.t_mono_ns) || f.t_mono_ns < lastMono) monoOk = false;
@@ -252,6 +323,7 @@ function checkFrames(cap, allFrames, t1) {
     const q = f.quality;
     const inUnit = (v) => typeof v === "number" && v >= 0 && v <= 1;
     if (!(inUnit(q) || (Array.isArray(q) && q.every(inUnit)))) qualityOk = false;
+    if (Array.isArray(q) && channels !== undefined && q.length !== channels) qualityLenOk = false;
 
     if (t1?.adaptive === true && f.adapt_state === undefined) adaptMissing = true;
 
@@ -270,6 +342,13 @@ function checkFrames(cap, allFrames, t1) {
   if (!finiteOk) fail("R-5.1", "values[] contains NaN or Infinity");
   qualityOk ? pass("R-5.6", "quality present and in 0..1")
             : fail("R-5.6", "quality missing or out of range");
+  if (!qualityLenOk) {
+    fail("R-5.6", `per-channel quality array length disagrees with signal.channels (${channels}) — quality is per channel, not per feature dimension`);
+  }
+  if (!monoRange) fail("R-5.2", "t_mono_ns exceeds 2^53 — a Unix-epoch nanosecond clock, which JSON cannot represent exactly");
+  if (wallMissing) fail("R-5.1", "clock.rtc is true but frames carry no t_wall_ms");
+  if (wallInvented) fail("R-5.1", "clock.rtc is false but frames carry t_wall_ms — a device without an RTC must omit it, not invent one");
+  if (hasRtc === false && !wallInvented) pass("R-5.1", "no RTC declared and no invented wall clock in frames");
   seqOk ? pass("R-5.3", `seq strictly increasing per session (${gaps} visible gap(s))`)
         : fail("R-5.3", "seq repeats or decreases within a session — reordering or renumbering");
   if (adaptMissing) fail("R-5.5", "adaptive T1 declared but frames carry no adapt_state");

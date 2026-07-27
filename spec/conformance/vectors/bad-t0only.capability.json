@@ -19,8 +19,18 @@
       "reference": "differential-adjacent"
     }
   },
+  "clock": {
+    "rtc": false,
+    "mono_epoch": "boot"
+  },
   "transport": [
-    "https://api.example.com/v1/gestures"
+    {
+      "uri": "https://api.example.com/v1/gestures",
+      "encodings": [
+        "json"
+      ],
+      "max_sustained_kbps": 100
+    }
   ],
   "requires_account": true,
   "requires_network": true,

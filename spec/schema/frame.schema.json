@@ -3,16 +3,21 @@
   "$id": "https://akasara.dev/spec/0.1/frame.schema.json",
   "title": "ASE-0.1 T1 feature frame",
   "type": "object",
-  "required": ["tier", "t_mono_ns", "t_wall_ms", "session_id", "seq", "feature_space", "values", "quality"],
+  "required": ["tier", "t_mono_ns", "session_id", "seq", "feature_space", "values", "quality"],
   "additionalProperties": true,
   "properties": {
     "tier": { "const": "t1" },
     "t_mono_ns": {
       "type": "integer",
       "minimum": 0,
-      "description": "monotonic device clock at END of analysis window"
+      "maximum": 9007199254740991,
+      "description": "R-5.2 — monotonic device clock at END of analysis window; epoch is boot or session start, never Unix (2^53 ns limit in JSON)"
     },
-    "t_wall_ms": { "type": "integer", "minimum": 0 },
+    "t_wall_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "R-5.1 — present if and only if clock.rtc is true; a device without an RTC omits this rather than inventing a value"
+    },
     "session_id": { "type": "string", "minLength": 1 },
     "seq": { "type": "integer", "minimum": 0 },
     "feature_space": { "type": "string", "minLength": 3 },
@@ -30,7 +35,7 @@
           "items": { "type": "number", "minimum": 0, "maximum": 1 }
         }
       ],
-      "description": "measured contact/impedance adequacy; NOT classifier confidence"
+      "description": "R-5.6 — measured contact/impedance adequacy; array form has exactly signal.channels entries (NOT dim), and is never classifier confidence"
     },
     "adapt_state": {
       "type": "string",

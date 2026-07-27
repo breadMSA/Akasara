@@ -3,12 +3,19 @@
 An open specification for body-signal wearables: **how a device makes the signal
 it already records available to software its user chooses.**
 
+Not a design blueprint. It specifies what must come out of the box and under
+what terms — no electrodes, radios, enclosures, or algorithms. A vendor changes
+no hardware to conform.
+
 | File | What it is |
 | --- | --- |
 | [`ASE-0.1.md`](ASE-0.1.md) | The specification. |
 | [`schema/`](schema/) | JSON Schema for the capability descriptor and the T1 frame. |
-| [`conformance/`](conformance/) | Reference test suite, zero dependencies, plus conformant and non-conformant vectors. |
+| [`conformance/check.mjs`](conformance/check.mjs) | Reference test suite, zero dependencies. |
+| [`conformance/abf.mjs`](conformance/abf.mjs) | Reference codec for the ABF binary frame encoding (§9.2). |
 | [`conformance/selftest.mjs`](conformance/selftest.mjs) | Generator for `ase.selftest.v1`, the fixed synthetic input every device runs its T1 transform over. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Errata and revisions, per §13.2. |
+| [`LICENSE`](LICENSE) / [`LICENSE-CODE`](LICENSE-CODE) | CC BY 4.0 for the text, Apache-2.0 for the code. Patent commitment in §12.2. |
 
 ## The short version
 
@@ -31,9 +38,16 @@ signal space onto another's) is not degraded at T0. It cannot be attempted.
 version-pinned feature space, with no term forbidding a user from processing
 their frames alongside another consenting person's.
 
-## Certification
+## Cost to implement, honestly
 
-Self-certification. Run the suite, publish the descriptor and the output:
+Most of it is free — T1 values already exist in the pipeline, and sequence
+numbers, session ids and `quality` are bookkeeping. Two clauses cost real work:
+the self-test path (R-5.7, days) and keeping the previous feature space
+obtainable after a change (R-7.5.1, satisfiable with a downgrade image rather
+than two live pipelines). §1.1 answers the three objections a vendor actually
+raises: privacy liability, competitor cloning, and SDK gating.
+
+## Running the suite
 
 ```bash
 cd conformance
@@ -47,24 +61,38 @@ node check.mjs vectors/good.capability.json vectors/good.frames.jsonl \
 # no captures needed
 node check.mjs --compare vectors/good.capability.json \
                          vectors/silent-update.after.capability.json
+
+# the binary encoding round-trips and matches the bandwidth table in §10
+node abf.mjs --selftest
 ```
 
-No fee, no gatekeeper, no approved-vendor list — a spec that gates its own
-conformance reproduces the problem it exists to solve.
+Vectors cover a conformant device, the align profile, a T0-only cloud-gated
+device, a stream with a silent transform change, a device promising a frame rate
+its radio cannot carry, and a device inventing a wall clock it does not have.
 
-The `--compare` mode is the point of R-5.7. A device publishes what its
-production transform returns for one fixed synthetic input; anyone can then
-detect a silently re-trained on-device model from two descriptors alone, with no
-statistics and no access to the hardware.
+`--compare` is the point of R-5.7: a device publishes what its production
+transform returns for one fixed synthetic input, so a silently re-trained
+on-device model is detectable from two descriptors alone — no statistics, no
+access to the hardware.
 
-## Who this is for
+## Certification
 
-Any hardware maker outside a closed platform's ecosystem. You are locked out of
-the same walled gardens, and a cross-vendor semantic layer is not something any
-one of you can build alone. The tier requirement costs you a serial endpoint and
-a documented feature vector. It buys a device whose data a user actually owns.
+Self-certification. No fee, no gatekeeper, no approved-vendor list — a spec that
+gates its own conformance reproduces the problem it exists to solve. Claim
+wording and what the suite can and cannot decide are in §11; the honest limit is
+that every §7 requirement except R-7.2 is a vendor declaration the suite can
+only record, not verify.
+
+## Licence and patents
+
+Text CC BY 4.0, code Apache-2.0. §12.2 is a royalty-free, irrevocable patent
+commitment that requires no registration, fee, or contact, with defensive
+suspension as its only carve-out. ASE-Core conformance is never conditioned on
+any profile licence (R-8.1). If the editor becomes unreachable for 12 months the
+spec freezes and every grant survives (§13.5) — no implementer is stranded.
 
 ## Status
 
-Draft 0.1, 2026-07-27. Open issues are listed in §10. Comments welcome; the
-schema and clause numbering may still move before 1.0.
+Draft 0.1, 2026-07-27, single editor, no organisation behind it (§13.1). Open
+issues are in §14. The schema and clause numbering may still move before 1.0;
+requirement identifiers are never reused or renumbered.
