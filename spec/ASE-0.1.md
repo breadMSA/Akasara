@@ -213,13 +213,56 @@ Registered coordinate systems for 0.1:
 - **`ase.face.v1`** — `positions[]` entries are `{ ch, muscle }` using FACS
   muscle names (`orbicularis-oris`, `zygomaticus-major`, …).
 - **`ase.opaque.v1`** — escape hatch for arrangements the above cannot express
-  (implanted arrays, novel geometries). `positions[]` MAY be omitted. **A device
+  (implanted arrays, novel geometries). `positions[]` MAY be omitted. A device
   declaring `ase.opaque.v1` is ASE-Core conformant but is not montage-comparable
-  with anything, including another unit of the same model.** The suite reports
-  this rather than failing it.
+  **across models**. The suite reports this rather than failing it.
 
-Tolerance for comparability is not fixed by this document; it belongs to the
-consumer of the data. The descriptor's job is to make the question answerable.
+**R-4.2.1 (opaque devices are still comparable to themselves).** A device using
+`ase.opaque.v1` MUST declare `geometry_id`: an identifier that is identical
+across units whose sensor arrangement is interchangeable, and different as soon
+as it is not. Two captures carrying the same `geometry_id` are comparable; two
+carrying different ones are not.
+
+> Non-normative: the first draft let an opaque device be incomparable even with
+> another unit of the same model, which is both useless and untrue — a
+> production run is interchangeable by construction. `geometry_id` costs the
+> vendor one string and recovers within-model comparability, which is the case
+> that actually occurs. Cross-model comparability for opaque geometries stays
+> genuinely unsolved (§14).
+
+**R-4.2.2 (rotation, and how precise `angle_deg` has to be).** For a
+`circumferential` array, two montages with the same electrode **count and
+spacing** are comparable regardless of their absolute rotation. `angle_deg`
+MUST be accurate to within half an electrode spacing; finer precision is not
+required and MUST NOT be assumed by a consumer.
+
+> Measured, not assumed (Ninapro DB5, 6 subjects, 30 ordered pairs, 52 shared
+> movements, single-trial calibration-free direct transfer, chance 0.062):
+>
+> | B's band rotated | P@1 | vs aligned |
+> | --- | --- | --- |
+> | 0° | 0.285 | — |
+> | 11.25° (¼ electrode) | 0.271 | −0.014, CI [−0.017, −0.011] |
+> | 22.5° (½ electrode) | 0.260 | −0.025, CI [−0.030, −0.020] |
+> | 45° (1 electrode) | 0.285 | 0.000 |
+> | 90° (2 electrodes) | 0.285 | 0.000 |
+>
+> Two things fall out. Whole-electrode rotations are **exactly** free, because a
+> fitted linear map absorbs a channel permutation — so requiring vendors to
+> agree on absolute band orientation would buy nothing. Sub-electrode
+> misalignment does cost, worst at the half-way point, but only ~9% of transfer,
+> which is why the tolerance above is half a spacing and not a degree.
+>
+> The limit of the evidence: this holds for a map fitted per pair on that
+> device's own data. A device shipping a fixed pre-trained decoder does not
+> inherit the permutation invariance. The rotation is also modelled as a linear
+> blend of neighbouring electrodes in the raw signal, which is first-order —
+> real re-donning changes skin contact too, and that is the larger effect
+> (see R-6.2).
+
+Tolerance for comparability beyond the rotation case is not fixed by this
+document; it belongs to the consumer of the data. The descriptor's job is to
+make the question answerable.
 
 **R-4.3 (clock declaration).** The descriptor MUST carry a `clock` block stating
 whether the device has a real-time clock (`rtc`), the epoch of its monotonic
@@ -252,9 +295,21 @@ representable range and is silently corrupted. A device with no RTC MUST omit
 **R-5.2.1 (host time sync).** The device SHOULD implement the `time_echo`
 control command (§10.4): the host sends a token, the device returns it with the
 `t_mono_ns` at which it was received. Two exchanges bracketing a capture let the
-host place device time on its own clock and estimate drift. Without this a host
-can only assume the declared `drift_ppm_max`, which is the difference between
-tens of milliseconds and tens of microseconds of alignment error over a session.
+host place device time on its own clock and estimate drift.
+
+> Why SHOULD and not MUST, measured (same setup as R-4.2.2): sliding one
+> person's analysis window against the other's by a fixed offset costs almost
+> nothing at gesture granularity — P@1 0.285 at 0 ms, 0.285 at 25 ms, 0.284 at
+> 100 ms, 0.283 at 400 ms, i.e. **0.8% lost at 400 ms**. Cross-device clock
+> error from the declared `drift_ppm_max` is two to three orders of magnitude
+> smaller than that over a session. Making `time_echo` mandatory would impose
+> firmware work to protect a tolerance the task does not appear to need.
+>
+> The limit of the evidence: DB5 repetitions last seconds, so this bounds the
+> *gesture-retrieval* regime only. Continuous decoding, and anything that pairs
+> two people's signals sample-by-sample rather than event-by-event, is not
+> covered and could easily invert the conclusion — which is why the command is
+> specified now and merely not required.
 
 **R-5.3** The device MUST document typical and worst-case sensor-to-host
 latency, and MUST NOT reorder frames. Gaps MUST be visible as `seq` gaps, never
@@ -498,6 +553,32 @@ receiving a lossy encoding cannot verify R-5.7 from the stream.
 receiver that does not understand a message MUST be able to discard it using
 the length its transport provides, and MUST NOT desynchronise.
 
+### 9.3 Export container (`.ase`)
+
+Streaming is protected by its link layer; a file on disk is not, and R-7.6
+exports are exactly the artifacts someone will still be fitting encoders
+against in two years. The container therefore carries integrity checks.
+
+An `.ase` file is: the capability descriptor as one UTF-8 JSON line terminated
+by `\n`, then a sequence of records, then a trailer.
+
+| Part | Layout |
+| --- | --- |
+| Record | `uint32 length` (of the payload), payload bytes (one ABF message), `uint32 crc32` of the payload |
+| Trailer | ASCII `ASEEND\n`, then `uint64 record_count`, then the 32-byte SHA-256 of every payload byte in order |
+
+**R-9.3** A reader MUST verify each record's CRC-32 (ISO-HDLC, the zlib
+polynomial) and MUST reject a record that fails rather than silently passing
+corrupted values downstream. A reader MUST verify the trailer digest when the
+file is read in full, and MUST report a truncated file — a missing trailer —
+as truncated rather than as a short but valid capture.
+
+> Non-normative: per-record CRC rather than per-frame, and a whole-file digest
+> rather than a signature. This detects the failure that actually happens — bit
+> rot, a half-written file, a truncated copy — without pretending to
+> authenticate the device, which a CRC cannot do and which needs the
+> `akasara.align.v1` signed record or a platform attestation to do properly.
+
 ## 10. Transport bindings
 
 At least one binding MUST be implemented.
@@ -584,6 +665,27 @@ Available on every binding. Commands, as JSON objects:
 time. If it does, it MUST report the rejection reason rather than failing
 silently, and MUST NOT reserve the single slot for a vendor application.
 
+### 10.5 Security model
+
+What is being protected: a T1 stream is biometric-grade data about a person's
+body, continuously. What is deliberately **not** in scope: this specification
+defines no write path to the body, so nothing here can be abused to actuate a
+device. That asymmetry is intentional and should survive into any successor.
+
+| Threat | Position |
+| --- | --- |
+| Passive radio eavesdropper | **R-10.4**: BLE T1 and T0 characteristics MUST require an encrypted link (LE Secure Connections). Just Works pairing is permitted; unencrypted streaming is not. |
+| Network attacker reaching the loopback socket | **R-10.5**: the WebSocket listener MUST bind to a loopback address only, MUST reject `Origin` headers it was not configured for, and MUST NOT be exposed on `0.0.0.0` even behind an option. |
+| A malicious application on the user's own machine | **Out of scope, and stated rather than hidden.** Once the transport is up, any local process with the same privileges can read frames. Confining that is the host operating system's job — the same position taken for microphones and cameras — and a device-side attempt at it would collapse into the developer-gating that R-7.3 forbids. |
+| A vendor exfiltrating the signal | Not addressed by this document. R-7.1 removes the *necessity* of a cloud path; it does not prove the absence of one. That takes network monitoring, not a spec. |
+| A forged or replayed capture | Not addressed at Core. A CRC (R-9.3) detects damage, not forgery. Devices needing provenance implement the signed enrollment record of `akasara.align.v1`. |
+
+**R-10.6** A device MUST NOT expose T2 or T3 on a transport with weaker
+protection than it applies to T1. Higher tiers are strictly more sensitive.
+
+**R-10.7** Loss of the encrypted link MUST end the session (R-6.1) rather than
+resume silently onto a new one; a host MUST be able to see the discontinuity.
+
 ## 11. Conformance and claims
 
 **R-11.1** A device is **ASE-0.1 Core conformant** if it satisfies every MUST in
@@ -615,6 +717,47 @@ the problem it exists to solve. There is also, therefore, no authority that can
 revoke a claim. The remedy for a false claim is the same as for any other false
 product statement: it is checkable by anyone in minutes, and consumer-protection
 law already covers verifiably untrue advertising.
+
+### 11.5 Feature-space floor (provisional)
+
+§14 records that ASE constrains the *form* of a T1 feature space and not its
+information content, so a vendor could ship something conformant and useless.
+That gap is now partly closed: a reference task does separate them.
+
+Reference task, as run: Ninapro DB5, 6 subjects, 30 ordered subject pairs, 52
+shared movements, features fitted per pair on training movements only,
+single-trial calibration-free retrieval of held-out movements, chance 0.062.
+
+| Feature space | P@1 | × chance |
+| --- | --- | --- |
+| MAV only, 16 d | 0.301 | 4.8 |
+| WL only, 16 d | 0.301 | 4.8 |
+| full 64 d (MAV+RMS+WL+VAR) | 0.285 | 4.6 |
+| full, 8-bit quantised | 0.284 | 4.5 |
+| VAR only, 16 d | 0.264 | 4.2 |
+| channel-mean, 4 d | 0.132 | 2.1 |
+| total energy, 1 d | 0.108 | 1.7 |
+
+Paired across pairs: full vs channel-mean **+0.153, CI [+0.137, +0.168]** — the
+task separates a real feature space from a degenerate one decisively.
+
+**Provisional floor:** a T1 feature space intended for cross-user use should
+reach at least **3.5× chance** on a task of this shape. Everything a practitioner
+would call a real sEMG feature set clears it; the two degenerate sets do not
+come close.
+
+Two findings that constrain how a floor may be written:
+
+- **Dimension count is not merit.** MAV alone at 16 d beats the full 64 d set by
+  +0.016, CI [+0.009, +0.024] — small but consistent, because VAR is the weakest
+  block and dilutes the rest. A floor MUST NOT be expressed as a minimum `dim`,
+  and this document does not impose one.
+- **8-bit quantisation is nearly free** (0.284 vs 0.285), which is what makes the
+  lossy value encodings of §9.2 defensible.
+
+This is marked **provisional and non-normative**: one dataset, one modality, one
+task shape. Turning it into a MUST requires at least a second modality and a
+task the vendor cannot overfit to, which is the 1.0 work item in §14.
 
 ## 12. Intellectual property
 
@@ -688,28 +831,36 @@ specification that stops improving, not one that stops being safe to implement.
 
 - `ase.limb.v1` fixes an origin at a named landmark but says nothing about how
   the device knows where that landmark is; in practice the user positions the
-  band by eye. The descriptor is honest about intent, not about millimetres.
-- `ase.opaque.v1` is a real hole, deliberately left open: a device can be fully
-  conformant and still not comparable to anything. It exists so implanted and
-  novel geometries are not forced into a false vocabulary.
-- No `kind`-specific requirement distinguishes a *good* T1 feature set from a
-  conformant one. The spec constrains form, not information content, and a
-  vendor can ship a conformant, useless feature space. Fixing this needs a
-  reference task and a floor score — the largest single piece of work for 1.0.
+  band by eye. **Partly retired** by R-4.2.2: the measured cost of getting it
+  wrong is ~9% at worst within one electrode spacing, and whole-electrode error
+  is free, so the descriptor does not need millimetres. What remains open is
+  axial (along-limb) placement, which was not tested and is not permutation-like.
+- `ase.opaque.v1` still cannot be compared **across models**. R-4.2.1 recovered
+  the within-model case, which is the one that actually occurs; cross-model
+  comparability for opaque geometries is genuinely unsolved and may not be
+  solvable from a descriptor alone.
+- The feature-space floor is **provisional** (§11.5) and non-normative: one
+  dataset, one modality, one task shape. Making it a MUST needs a second
+  modality and a task a vendor cannot overfit — the largest 1.0 work item. Note
+  also that a floor stated as a minimum `dim` would be actively wrong (§11.5).
 - Self-test (R-5.7) proves the transform is unchanged. It does not prove the
   transform is applied to real acquisition — a device could pass self-test and
   still stream garbage. Detecting that needs a physical fixture.
-- No security model. Any local process can read frames once the transport is up.
-  BLE pairing is left to the platform. Host-side authorisation is out of scope,
-  which is defensible for a data-export spec and indefensible if a device ever
-  gains a write path.
-- ABF has no integrity check. A corrupted BLE notification is detected by the
-  link layer, but a corrupted file on disk is not; 1.0 should add a CRC to the
-  export container rather than to every frame.
-- The 90-day floor in R-7.5.1 rests on two estimated parameters (§7).
-- `time_echo` is a SHOULD, so hosts cannot rely on it. If cross-device alignment
-  proves to need it universally, it becomes a MUST in 0.2 — that is the most
-  likely requirement upgrade.
+- The security model (§10.5) leaves same-machine isolation to the host OS. That
+  is defensible for a read-only export spec and would be indefensible the moment
+  any successor adds a write path.
+- The 90-day floor in R-7.5.1 rests on two estimated parameters (§7). The
+  enrollment-saturation one is measurable on a multi-session dataset and has not
+  been measured yet; the consumer wear-frequency one needs adherence literature,
+  not an experiment.
+- `time_echo` stays a SHOULD on gesture-granularity evidence (R-5.2.1). A
+  continuous-decoding or sample-paired workload could invert that, and is the
+  most likely requirement upgrade in 0.2.
+- R-5.7 self-test proves the transform is unchanged, not that it is applied to
+  real acquisition. Closing this needs a signal injected at the electrodes and a
+  conformant device to inject it into — so it is blocked on a first implementer,
+  not on money or effort.
+- Axial placement along the limb is untested, unlike rotation (R-4.2.2).
 
 ## Appendix A — `quality` per signal kind (normative)
 

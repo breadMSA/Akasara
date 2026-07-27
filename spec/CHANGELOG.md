@@ -41,6 +41,32 @@ thing a later reader will want to see was caught rather than missed:
   `akasara.align.v1` licence.
 - **R-11.2 added** to state which requirements the suite can decide and which
   are vendor declarations it can only record.
+Second same-day revision — three open issues closed with measurements rather
+than assertions (Ninapro DB5, 6 subjects, 30 ordered pairs, chance 0.062):
+
+- **R-4.2.2 added.** Whole-electrode band rotation is exactly free (a fitted
+  linear map absorbs a channel permutation); sub-electrode misalignment costs at
+  most ~9%, worst at the half-way point. So comparability needs matching
+  electrode count and spacing, not matching absolute orientation, and
+  `angle_deg` needs half-a-spacing accuracy, not degrees.
+- **R-5.2.1 justified.** A 400 ms window offset between two people costs 0.8% of
+  transfer, orders of magnitude more slack than declared oscillator drift
+  consumes. `time_echo` stays SHOULD, now on evidence instead of taste.
+- **§11.5 added:** a provisional, non-normative feature-space floor of 3.5×
+  chance. The reference task separates real feature sets (4.2–4.8× chance) from
+  degenerate ones (1.7–2.1×), paired CI [+0.137, +0.168]. Two constraints fell
+  out: a floor must not be written as a minimum `dim` (MAV-only 16 d beats the
+  full 64 d set, CI [+0.009, +0.024]), and 8-bit quantisation is nearly free,
+  which is what makes §9.2's lossy encodings defensible.
+- **§9.3 export container** with per-record CRC-32 and a whole-file SHA-256,
+  replacing the "no integrity check" open issue.
+- **§10.5 security model** — threat table, BLE encryption required (R-10.4),
+  loopback-only binding (R-10.5), tier-monotonic protection (R-10.6), session
+  break on link loss (R-10.7), and an explicit statement that same-machine
+  isolation is the host OS's job.
+- **R-4.2.1 added:** opaque-montage devices declare a `geometry_id`, recovering
+  within-model comparability. The first draft declared them incomparable even
+  with another unit of the same model, which was both useless and untrue.
 - Numbering, scope, and BCP 14 citation fixes: §3 requirements are now labelled
   R-3.1–R-3.3 (the suite already emitted "R-3"), conformance scope in R-11.1
   covers §§3–10 and Appendix A rather than §§4–7.
