@@ -501,11 +501,17 @@ and it is not the intent.
 > tail.
 >
 > What remains unmeasured is the **20 donning sessions** itself; it is
-> extrapolated from fitting behaviour observed offline, not measured. The public
-> cross-day EMG datasets carry two sessions per subject, which cannot show where
-> a learning curve saturates. Settling it needs a many-donning dataset — the
-> registration-gated Ninapro DB6 (10 sessions over 5 days) is the closest — or a
-> vendor's own enrollment telemetry.
+> extrapolated from fitting behaviour observed offline, not measured. The
+> cross-day EMG dataset used elsewhere in this document (Hyser) carries two
+> sessions per subject, which cannot show where a learning curve saturates — it
+> bounds only the data-volume half, which saturates near 100 single-session
+> trials. An earlier revision said no open dataset could settle the other half;
+> that was wrong. CEMHSEY records 11 consecutive days with the electrode grids
+> taken down and re-applied each day, openly on Zenodo
+> (10.5281/zenodo.14224328, 10.5281/zenodo.14272463), and the
+> registration-gated Ninapro DB6 (10 sessions over 5 days) is a second option.
+> Neither reaches 20 donnings, so either would bound the parameter rather than
+> confirm it. It stays asserted until one of them is run.
 >
 > The completion condition, not the day count, is the substantive requirement;
 > the floor only stops a vendor from declaring re-enrollment "complete" the
@@ -742,7 +748,10 @@ completeness, self-test consistency, bandwidth feasibility. Every requirement in
 §7 other than R-7.2 is a statement about the vendor's terms and product
 behaviour, and the suite can only check that the vendor has *declared* it. A
 false declaration is a false statement by the vendor, not a test failure. This
-line is stated here so that no one mistakes a green run for an audit.
+line is stated here so that no one mistakes a green run for an audit. R-11.5 is
+likewise outside the suite: it is measured on the vendor's own data, which the
+suite never sees, so the suite can check only that the required margin, task,
+subject count and bootstrap unit have been published.
 
 **R-11.3 (claiming conformance).** A conformance claim MUST take the form
 "ASE-0.1 Core conformant" optionally followed by badges, MUST name the exact
@@ -758,7 +767,7 @@ revoke a claim. The remedy for a false claim is the same as for any other false
 product statement: it is checkable by anyone in minutes, and consumer-protection
 law already covers verifiably untrue advertising.
 
-### 11.5 Feature-space floor (provisional)
+### 11.5 Feature-space floor
 
 §14 records that ASE constrains the *form* of a T1 feature space and not its
 information content, so a vendor could ship something conformant and useless.
@@ -767,62 +776,148 @@ That gap is now partly closed: a reference task does separate them.
 Reference task, as run: Ninapro DB5, 6 subjects, 30 ordered subject pairs, 52
 shared movements, features fitted per pair on training movements only,
 single-trial calibration-free retrieval of held-out movements, chance 0.062.
+Features are computed after removing each channel's DC pedestal, on both this
+dataset and the next — see the retraction further down for why that is stated.
 
 | Feature space | P@1 | × chance |
 | --- | --- | --- |
-| MAV only, 16 d | 0.301 | 4.8 |
-| WL only, 16 d | 0.301 | 4.8 |
-| full 64 d (MAV+RMS+WL+VAR) | 0.285 | 4.6 |
-| full, 8-bit quantised | 0.284 | 4.5 |
-| VAR only, 16 d | 0.264 | 4.2 |
+| MAV only, 16 d | 0.300 | 4.8 |
+| WL only, 16 d | 0.300 | 4.8 |
+| full 64 d (MAV+RMS+WL+VAR) | 0.288 | 4.6 |
+| full, 8-bit quantised | 0.288 | 4.6 |
+| VAR only, 16 d | 0.256 | 4.1 |
 | channel-mean, 4 d | 0.132 | 2.1 |
-| total energy, 1 d | 0.108 | 1.7 |
+| total energy, 1 d | 0.110 | 1.8 |
 
-Paired across pairs: full vs channel-mean **+0.153, CI [+0.137, +0.168]** — the
+Paired across pairs: full vs channel-mean **+0.156, CI [+0.141, +0.171]** — the
 task separates a real feature space from a degenerate one decisively.
 
 **An absolute threshold was drafted here and then withdrawn.** The first version
 of this section proposed a floor of "≥ 3.5× chance". Replicating on a second
-dataset killed it. Hyser HD-sEMG (256-channel grid, 2048 Hz, 3 subjects with
-both recording days, 6 ordered pairs, 34 shared gestures, chance 0.100):
+dataset killed it, and auditing that replication then killed one of the two
+reasons first given for the withdrawal. Both are recorded below, because the
+retracted one is the more useful warning.
+
+Second dataset: Hyser HD-sEMG (256-channel grid, 2048 Hz, 6 subjects, 30 ordered
+pairs — the same pair count as the DB5 leg — 32 shared gestures, chance 0.100).
+Both columns are measured with the per-channel DC pedestal removed; see the
+retraction below for why that matters:
 
 | Feature space | DB5 (16-ch ring) | Hyser (256-ch grid) |
 | --- | --- | --- |
-| WL only | 0.301 (4.8×) | **0.226 (2.3×)** |
-| full (MAV+RMS+WL+VAR) | 0.285 (4.6×) | 0.168 (1.7×) |
-| full, 8-bit quantised | 0.284 (4.5×) | 0.168 (1.7×) |
-| MAV only | **0.301 (4.8×)** | 0.107 (1.1×) |
-| channel-mean 4 d | 0.132 (2.1×) | 0.118 (1.2×) |
-
-Two things break across datasets, and one holds:
+| full (MAV+RMS+WL+VAR) | 0.288 (4.6×) | 0.198 (2.0×) |
+| full, 8-bit quantised | 0.288 (4.6×) | 0.198 (2.0×) |
+| WL only | 0.300 (4.8×) | **0.199 (2.0×)** |
+| MAV only | **0.300 (4.8×)** | 0.161 (1.6×) |
+| VAR only | 0.256 (4.1×) | 0.147 (1.5×) |
+| channel-mean 4 d | 0.132 (2.1×) | 0.133 (1.3×) |
+| total energy 1 d | 0.110 (1.8×) | 0.109 (1.1×) |
 
 - **The absolute multiple of chance does not transfer.** Hyser's *best* feature
-  set reaches 2.3× — below the 3.5× that was about to be written down. A vendor
+  space reaches 2.0× — below the 3.5× that was about to be written down. A vendor
   with a perfectly good HD-sEMG feature space would have been judged
-  non-conformant by that floor.
-- **The ranking of specific features does not transfer either.** MAV-only is the
-  best set on DB5 and near-chance on Hyser; WL-only is best on both but by very
-  different margins. No document can name a preferred feature.
-- **What does hold on both is relative:** a real feature space beats its own
-  degenerate reduction — DB5 +0.153, CI [+0.137, +0.168]; Hyser +0.051, CI
-  [+0.025, +0.070]. And 8-bit quantisation is free in both (0.284 vs 0.285;
-  0.168 vs 0.168), which is what makes §9.2's lossy encodings defensible.
+  non-conformant by that floor. This is not an artefact of the two legs using
+  different retrieval sizes (a multiple of chance is not comparable across *N*):
+  re-running Hyser at DB5's exact settings, 16-way with k = 30, still gives a
+  best of 2.4× (measured on the four subjects available when that check was run).
+- **What holds on both is relative:** a real feature space beats its own
+  degenerate reduction — DB5 +0.156, CI [+0.141, +0.171]; Hyser +0.065, CI
+  [+0.049, +0.083]. And 8-bit quantisation is free in both (0.288 vs 0.288;
+  0.198 vs 0.198), which is what makes §9.2's lossy encodings defensible.
+- **Retracted: a claimed second failure, "the ranking of features does not
+  transfer either."** The first Hyser run reported MAV-only as the best space on
+  DB5 and near chance (1.1×) on Hyser, and this document quoted it. That was a
+  defect in the loader used here, not a property of HD-sEMG. Hyser's WFDB header
+  gives every channel its own `baseline`; the loader read the raw `.dat` without
+  the header, so MAV = mean |x| and RMS were computed on a signal sitting on a
+  per-electrode DC pedestal (|channel mean| = 0.365 of channel std), while WL (a
+  difference) and VAR (mean-subtracted) are DC-immune by construction — which is
+  exactly the ranking that was reported and mistaken for a finding. Removing the
+  pedestal moves MAV from 1.1× to 1.6× (+0.049, positive on 27 of 30 pairs) and
+  leaves WL and VAR bit-identical, which is the check that the correction changed
+  only what it should. The corrected sets fall in one band, 1.5–2.0×, with no
+  inversion left to explain. DB5 carries the same pedestal but a much smaller one
+  (0.124 of std) and is unmoved by the correction (full +0.0015), so the
+  cross-dataset comparison above is now on one footing rather than two pipelines.
 
-**Revised provisional criterion, relative and non-normative:** a T1 feature space
-intended for cross-user use should beat the channel-mean reduction of *itself*,
-on the vendor's own data, by a margin whose confidence interval excludes zero.
-That is the only form of the statement that survived a second dataset. A floor
+**Third leg, on a different modality.** Both datasets above are sEMG, so the
+criterion could still have been a fact about muscle. It was re-run on EEG:
+ds007822 Prisoner's-Dilemma hyperscanning, 11 triads × 3 players, 19-channel
+10-20 at 300 Hz. Different physics, different montage, and a different transfer
+task — two players in a triad live the same game round, so an ordered pair is
+scored by retrieving held-out rounds, and two players from *different* triads
+never shared a round and give a real null rather than a shuffle. Feature space is
+per-round log band-power, 19 channels × 5 bands; every reduction below is a
+reduction of that same tensor. 66 within-triad ordered pairs, chance 0.083:
+
+| Feature space | P@1 | × chance | vs channel-mean 5 d |
+| --- | --- | --- | --- |
+| full 95 d | 0.151 | 1.8× | **+0.040, CI [+0.031, +0.049]** |
+| full, 8-bit quantised | 0.151 | 1.8× | +0.040, CI [+0.031, +0.049] |
+| gamma only, 19 d | 0.157 | 1.9× | +0.046, CI [+0.033, +0.060] |
+| beta only, 19 d | 0.148 | 1.8× | +0.038, CI [+0.026, +0.049] |
+| band-mean, 19 d | 0.141 | 1.7× | +0.030, CI [+0.019, +0.041] |
+| theta only, 19 d | 0.107 | 1.3× | −0.004, CI [−0.014, +0.006] |
+| alpha only, 19 d | 0.104 | 1.2× | −0.007, CI [−0.018, +0.005] |
+| channel-mean, 5 d | 0.111 | 1.3× | — |
+| total power, 1 d | 0.097 | 1.2× | — |
+
+Three things this settles, and one it does not:
+
+- **The relative criterion holds on a third dataset and a second modality.** The
+  full space beats its own channel-mean reduction on 55 of 66 pairs with a CI
+  clear of zero. Repeating under a drift control — candidate rounds forced ≥ 3
+  and ≥ 5 rounds apart, so nothing is winnable from slow within-session drift
+  alone — gives +0.043 and +0.076, both still clear of zero.
+- **The criterion is not vacuous: it fails things.** Alpha-only and theta-only
+  are perfectly conformant T1 spaces and do *not* beat the channel-mean
+  reduction, in every one of the three settings. A criterion that everything
+  passes would be decoration; this one separates.
+- **8-bit quantisation is free on a third modality too** (−0.0002, CI
+  [−0.0008, +0.0004]), which is now three datasets supporting §9.2.
+- **What it does not settle: the criterion does not certify that a space carries
+  the *intended* information.** Most of the full-vs-channel-mean margin is also
+  present between players who never shared a round (cross-triad 0.131 vs 0.098).
+  The margin therefore says "this space carries more cross-user-transferable
+  structure than its degenerate twin", not "this space carries shared state". The
+  genuinely shared-state part is the within-minus-cross difference, +0.020 (CI
+  [+0.006, +0.033]) for the full space, real but much smaller. A vendor could pass
+  §11.5 on generic structure. That is a limit of what a *feature-space* floor can
+  ever check, not a defect to be tuned away.
+
+**Criterion, now normative at SHOULD level (was provisional and non-normative):**
+
+**R-11.5** A T1 feature space offered for cross-user use SHOULD beat the
+channel-mean reduction of *itself*, on the vendor's own data and the vendor's own
+transfer task, by a margin whose 95% confidence interval excludes zero; a vendor
+publishing such a margin MUST also publish the task, the number of independent
+subjects, and the unit over which the interval was bootstrapped. It remains
+SHOULD and not MUST because the task is vendor-chosen and, per the bullet above,
+the margin can be earned from structure other than the intended signal. A floor
 MUST NOT be expressed as a minimum `dim` — dimension count is not merit, and on
 DB5 the 16-d MAV set beat the 64-d full set (+0.016, CI [+0.009, +0.024]).
 
-Honest limits of the Hyser leg: 3 subjects and 6 pairs is thin, and the loader
-reads the raw `.dat` without its WFDB header, assuming plain channel
-interleaving. If that assumption is wrong the grid's spatial structure is
-scrambled, which would depress spatially-pooled features and could by itself
-explain the MAV inversion. That possibility does not rescue the absolute
-threshold — the full set's 1.7× is measured on the same footing as everything
-else — but it does mean the *inversion* should not be quoted as a property of
-HD-sEMG.
+Honest limits. The three legs are 6 subjects / 30 pairs (DB5), 6 subjects / 30
+pairs (Hyser), and 33 subjects / 66 pairs (EEG). In none of them are the pairs
+independent — each subject appears in several — so a bootstrap over pairs gives a
+narrower interval than a subject-level test would, which is why R-11.5 obliges a
+vendor to name the unit. No headline claim rests on the interval alone: the
+Hyser retraction moves 27 of 30 pairs and the EEG margin 55 of 66. Three legs is
+still three legs, and no absolute score is claimed for any of them — 4.6×, 2.0×
+and 1.8× on the three datasets is the whole reason the floor is relative.
+
+One parameter in this area remains unmeasured and is not measured here: R-7.5.1's
+"~20 donning sessions". Hyser carries two sessions per subject, which bounds only
+the data-volume half. A dataset that could settle the donning-diversity half does
+exist — CEMHSEY, 11 consecutive days with the grids re-applied each day, Zenodo
+10.5281/zenodo.14224328 and .14272463 — but 11 days is not 20, so it would move
+the parameter from asserted to partially bounded rather than to measured. It is
+recorded here as the next thing to run, not as a result.
+
+The general lesson, recorded because it is cheap and this document paid for it
+twice: a number that reaches a spec must be replicated on a second dataset, and
+the loader that produced it must be checked against the dataset's own header
+before the result is described as a property of the signal.
 
 ## 12. Intellectual property
 
@@ -904,12 +999,17 @@ specification that stops improving, not one that stops being safe to implement.
   the within-model case, which is the one that actually occurs; cross-model
   comparability for opaque geometries is genuinely unsolved and may not be
   solvable from a descriptor alone.
-- The feature-space criterion (§11.5) is **relative and non-normative**, because
-  a second dataset showed that neither an absolute multiple of chance nor a
-  ranking of features transfers between sensor geometries. Making it normative
-  needs a genuinely different **modality** (both legs so far are sEMG) and a
-  task a vendor cannot overfit. Largest 1.0 work item, and now better bounded:
-  the thing to look for is a relative margin, not a score.
+- The feature-space criterion (§11.5) stays **relative**, because three datasets
+  now show that an absolute multiple of chance does not transfer between sensor
+  geometries (4.6×, 2.2×, 1.8×). (A companion claim, that the *ranking* of
+  features does not transfer either, was retracted in §11.5 — it was a loader
+  defect.) It is no longer non-normative: a third leg on EEG carried it to a
+  second modality, so it is now **R-11.5 at SHOULD level**. What keeps it off
+  MUST is the remaining open item, and it is a different one than before: the
+  transfer task is vendor-chosen, and the margin can be earned from generic
+  transferable structure rather than the intended signal — most of the EEG margin
+  survives between people who never shared a round. Closing that needs a task a
+  vendor cannot overfit, not another modality.
 - Enrollment data volume saturates around ~100 single-session trials on Hyser
   (P@1 0.132 at ~40 trials, 0.164 at ~100, 0.166 at ~200). That bounds the
   data-volume half of R-7.5.1's parameter; the donning-diversity half still does

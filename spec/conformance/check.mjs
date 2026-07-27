@@ -267,6 +267,25 @@ function checkCapability(cap) {
     if (t1.adaptive === true && t1.non_adaptive_mode !== true) {
       fail("R-5.5", "exported T1 is per-user adaptive with no non-adaptive mode offered");
     }
+
+    // R-11.5 — the margin itself is measured on the vendor's own data, which the
+    // suite never sees. What the suite can decide is whether a stated margin was
+    // stated readably: an interval with no task, no subject count and no
+    // resampling unit is not a claim anyone can weigh.
+    const m = t1.cross_user_margin;
+    if (m !== undefined) {
+      const missing = ["margin", "ci_low", "ci_high", "task", "subjects", "bootstrap_unit"]
+        .filter((f) => m[f] === undefined);
+      if (missing.length) {
+        fail("R-11.5", `t1.cross_user_margin states a margin but omits ${missing.join(", ")}`);
+      } else if (!(m.ci_low > 0)) {
+        warn("R-11.5", `declared margin CI [${m.ci_low}, ${m.ci_high}] does not exclude zero; the feature space is not shown to beat its own channel-mean reduction`);
+      } else if (m.bootstrap_unit !== "subject") {
+        warn("R-11.5", `margin resampled over ${m.bootstrap_unit}, not subject; if subjects recur across ${m.bootstrap_unit}s the interval is narrower than a subject-level one`);
+      } else {
+        pass("R-11.5", `cross-user margin ${m.margin} CI [${m.ci_low}, ${m.ci_high}] over ${m.subjects} subjects on "${m.task}"`);
+      }
+    }
   }
 
   checkTransports(cap, t1);

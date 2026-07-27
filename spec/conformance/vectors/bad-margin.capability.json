@@ -1,7 +1,7 @@
 {
   "ase_version": "0.1",
   "vendor": "example",
-  "model": "band-2",
+  "model": "band-2-naked-margin",
   "firmware": "3.4.1",
   "tiers": [
     "t0",
@@ -118,10 +118,7 @@
     "cross_user_margin": {
       "margin": 0.153,
       "ci_low": 0.121,
-      "ci_high": 0.184,
-      "task": "calibration-free cross-subject retrieval of held-out gestures, 52-way",
-      "subjects": 6,
-      "bootstrap_unit": "subject"
+      "ci_high": 0.184
     }
   },
   "clock": {

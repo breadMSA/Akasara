@@ -73,6 +73,22 @@
           "type": "array",
           "description": "R-9.1 — value encodings that stay within selftest tolerance",
           "items": { "enum": ["f32", "f16", "i16"] }
+        },
+        "cross_user_margin": {
+          "type": "object",
+          "description": "R-11.5 — optional. If a cross-user feature-space margin is claimed at all, it is only readable alongside the task it was measured on, the number of independent subjects, and the unit the interval was resampled over.",
+          "required": ["margin", "ci_low", "ci_high", "task", "subjects", "bootstrap_unit"],
+          "properties": {
+            "margin": { "type": "number", "description": "mean score of the declared feature space minus its own channel-mean reduction" },
+            "ci_low": { "type": "number" },
+            "ci_high": { "type": "number" },
+            "task": { "type": "string", "minLength": 3 },
+            "subjects": { "type": "integer", "minimum": 2, "description": "independent subjects, not pairs" },
+            "bootstrap_unit": {
+              "enum": ["subject", "pair", "session", "trial"],
+              "description": "the unit resampled; 'pair' is not independent when subjects recur across pairs"
+            }
+          }
         }
       }
     },

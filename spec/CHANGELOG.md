@@ -100,9 +100,79 @@ Fourth same-day revision — **a withdrawal**:
   (+0.153 and +0.051), and 8-bit quantisation is free on both. The criterion is
   restated in that form. Both legs are still sEMG, so "second modality" remains
   the open 1.0 item, now better bounded: look for a relative margin, not a score.
+  *(The feature-ranking half of this entry was retracted the same day — see the
+  fifth revision below. The withdrawal of the absolute floor stands.)*
 - Enrollment data volume saturates around ~100 single-session trials (Hyser),
   which bounds the data-volume half of R-7.5.1's parameter. The
-  donning-diversity half still has no dataset.
+  donning-diversity half still has no dataset. *("No dataset" was corrected in
+  the sixth revision below — CEMHSEY exists. It is still unrun.)*
 - Numbering, scope, and BCP 14 citation fixes: §3 requirements are now labelled
   R-3.1–R-3.3 (the suite already emitted "R-3"), conformance scope in R-11.1
   covers §§3–10 and Appendix A rather than §§4–7.
+
+Fifth same-day revision — **a retraction inside the previous withdrawal**:
+
+- **"The ranking of features does not transfer" is retracted.** The fourth
+  revision reported MAV-only as best on DB5 and near chance (1.1×) on Hyser and
+  wrote that into §11.5. Auditing the Hyser leg against the dataset's own WFDB
+  header — which the loader had never read — showed every channel carries its
+  own `baseline`, so MAV and RMS were being measured on a per-electrode DC
+  pedestal while WL and VAR are DC-immune by construction. That is the reported
+  ranking, manufactured by the loader. With the pedestal removed MAV goes 1.1× →
+  1.6× (positive on 27 of 30 pairs) while WL and VAR are bit-identical, and the
+  feature sets collapse into one 1.5–2.0× band with no inversion. §11.5 now
+  states the retraction rather than deleting the claim.
+- **Both §11.5 legs re-measured on one footing.** DB5 carries the same pedestal,
+  three times smaller, and is unmoved by the correction (full +0.0015), so its
+  published numbers change only in the third decimal (full 0.285 → 0.288, full
+  vs channel-mean +0.153 → +0.156). The Hyser leg is also widened from 3
+  subjects / 6 pairs to 6 / 30 — the same pair count as the DB5 leg.
+- **The withdrawal of the absolute floor survives the audit**, which is why it is
+  not reversed: Hyser's corrected best is 2.2×, still far below 3.5×. Also
+  checked and rejected as an explanation of the gap: the two legs had used
+  different retrieval sizes (16-way vs 10-way) and a multiple of chance is not
+  comparable across *N* — at DB5's exact settings Hyser reaches 2.4×.
+- **Experiment seeds made reproducible.** The split seeds were derived from
+  Python's `hash()`, which is salted per process, so the §11.5 numbers were not
+  reproducible between runs. Now `crc32`.
+
+Sixth same-day revision — **§11.5 becomes normative, at SHOULD**:
+
+- **A third leg closes §14's largest 1.0 item.** The criterion had two sEMG legs
+  and could still have been a fact about muscle. It now has an EEG leg:
+  ds007822 Prisoner's-Dilemma hyperscanning, 11 triads × 3 players, 19-ch 10-20,
+  round-retrieval between two players who lived the same game round, with players
+  from different triads as a real null rather than a shuffle. The full 95-d
+  band-power space beats its own channel-mean reduction by **+0.040, CI [+0.031,
+  +0.049]**, on 55 of 66 pairs, and survives a drift control that forces
+  candidate rounds ≥3 and ≥5 apart (+0.043, +0.076). The criterion also **fails**
+  things — alpha-only and theta-only spaces do not clear it in any setting — so
+  it separates rather than decorates. 8-bit quantisation is free here too
+  (−0.0002, CI [−0.0008, +0.0004]): three datasets now support §9.2.
+- **New R-11.5, at SHOULD.** A T1 feature space offered for cross-user use SHOULD
+  beat its own channel-mean reduction with a CI excluding zero, and a vendor
+  quoting such a margin MUST also publish the task, the independent-subject
+  count, and the unit the interval was resampled over. It is not a MUST because
+  the task is vendor-chosen and because the margin can be earned from generic
+  transferable structure: most of the EEG margin is still there between players
+  who never shared a round (cross-triad 0.131 vs 0.098), and the genuinely
+  shared-state part is only +0.020, CI [+0.006, +0.033]. That limit is now
+  written into §11.5 and is the new form of the open item — it needs a task a
+  vendor cannot overfit, not another modality.
+- **Third data point against an absolute floor.** The best EEG space reaches
+  1.8× chance, against 4.6× on DB5 and 2.0× on Hyser. The withdrawal of "≥ 3.5×"
+  is not a two-dataset accident.
+- **Schema and suite follow the requirement.** `t1.cross_user_margin` is added to
+  the capability schema with `margin`, `ci_low`, `ci_high`, `task`, `subjects`
+  and `bootstrap_unit` all required once the object is present; `check.mjs` fails
+  R-11.5 on a margin quoted without them, warns when the CI does not exclude zero
+  or when the resampling unit is not `subject`, and a new `bad-margin` vector
+  covers the failure. The margin itself is measured on data the suite never sees,
+  which R-11.2 now says explicitly.
+
+- **R-7.5.1's "~20 donning sessions" is still unmeasured, and now has a named
+  candidate.** CEMHSEY (11 consecutive days, grids re-applied daily, Zenodo
+  10.5281/zenodo.14224328 / .14272463) could bound the donning-diversity half.
+  Eleven days is not twenty, so it would make the parameter partially bounded
+  rather than measured. Recorded in §11.5 as the next thing to run; the spec text
+  continues to say the number is asserted.

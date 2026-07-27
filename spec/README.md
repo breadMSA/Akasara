@@ -68,7 +68,9 @@ node abf.mjs --selftest
 
 Vectors cover a conformant device, the align profile, a T0-only cloud-gated
 device, a stream with a silent transform change, a device promising a frame rate
-its radio cannot carry, and a device inventing a wall clock it does not have.
+its radio cannot carry, a device inventing a wall clock it does not have, and a
+device quoting an R-11.5 feature-space margin without the task, subject count and
+resampling unit that make an interval readable.
 
 `--compare` is the point of R-5.7: a device publishes what its production
 transform returns for one fixed synthetic input, so a silently re-trained
