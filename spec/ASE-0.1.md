@@ -781,23 +781,48 @@ single-trial calibration-free retrieval of held-out movements, chance 0.062.
 Paired across pairs: full vs channel-mean **+0.153, CI [+0.137, +0.168]** — the
 task separates a real feature space from a degenerate one decisively.
 
-**Provisional floor:** a T1 feature space intended for cross-user use should
-reach at least **3.5× chance** on a task of this shape. Everything a practitioner
-would call a real sEMG feature set clears it; the two degenerate sets do not
-come close.
+**An absolute threshold was drafted here and then withdrawn.** The first version
+of this section proposed a floor of "≥ 3.5× chance". Replicating on a second
+dataset killed it. Hyser HD-sEMG (256-channel grid, 2048 Hz, 3 subjects with
+both recording days, 6 ordered pairs, 34 shared gestures, chance 0.100):
 
-Two findings that constrain how a floor may be written:
+| Feature space | DB5 (16-ch ring) | Hyser (256-ch grid) |
+| --- | --- | --- |
+| WL only | 0.301 (4.8×) | **0.226 (2.3×)** |
+| full (MAV+RMS+WL+VAR) | 0.285 (4.6×) | 0.168 (1.7×) |
+| full, 8-bit quantised | 0.284 (4.5×) | 0.168 (1.7×) |
+| MAV only | **0.301 (4.8×)** | 0.107 (1.1×) |
+| channel-mean 4 d | 0.132 (2.1×) | 0.118 (1.2×) |
 
-- **Dimension count is not merit.** MAV alone at 16 d beats the full 64 d set by
-  +0.016, CI [+0.009, +0.024] — small but consistent, because VAR is the weakest
-  block and dilutes the rest. A floor MUST NOT be expressed as a minimum `dim`,
-  and this document does not impose one.
-- **8-bit quantisation is nearly free** (0.284 vs 0.285), which is what makes the
-  lossy value encodings of §9.2 defensible.
+Two things break across datasets, and one holds:
 
-This is marked **provisional and non-normative**: one dataset, one modality, one
-task shape. Turning it into a MUST requires at least a second modality and a
-task the vendor cannot overfit to, which is the 1.0 work item in §14.
+- **The absolute multiple of chance does not transfer.** Hyser's *best* feature
+  set reaches 2.3× — below the 3.5× that was about to be written down. A vendor
+  with a perfectly good HD-sEMG feature space would have been judged
+  non-conformant by that floor.
+- **The ranking of specific features does not transfer either.** MAV-only is the
+  best set on DB5 and near-chance on Hyser; WL-only is best on both but by very
+  different margins. No document can name a preferred feature.
+- **What does hold on both is relative:** a real feature space beats its own
+  degenerate reduction — DB5 +0.153, CI [+0.137, +0.168]; Hyser +0.051, CI
+  [+0.025, +0.070]. And 8-bit quantisation is free in both (0.284 vs 0.285;
+  0.168 vs 0.168), which is what makes §9.2's lossy encodings defensible.
+
+**Revised provisional criterion, relative and non-normative:** a T1 feature space
+intended for cross-user use should beat the channel-mean reduction of *itself*,
+on the vendor's own data, by a margin whose confidence interval excludes zero.
+That is the only form of the statement that survived a second dataset. A floor
+MUST NOT be expressed as a minimum `dim` — dimension count is not merit, and on
+DB5 the 16-d MAV set beat the 64-d full set (+0.016, CI [+0.009, +0.024]).
+
+Honest limits of the Hyser leg: 3 subjects and 6 pairs is thin, and the loader
+reads the raw `.dat` without its WFDB header, assuming plain channel
+interleaving. If that assumption is wrong the grid's spatial structure is
+scrambled, which would depress spatially-pooled features and could by itself
+explain the MAV inversion. That possibility does not rescue the absolute
+threshold — the full set's 1.7× is measured on the same footing as everything
+else — but it does mean the *inversion* should not be quoted as a property of
+HD-sEMG.
 
 ## 12. Intellectual property
 
@@ -879,10 +904,20 @@ specification that stops improving, not one that stops being safe to implement.
   the within-model case, which is the one that actually occurs; cross-model
   comparability for opaque geometries is genuinely unsolved and may not be
   solvable from a descriptor alone.
-- The feature-space floor is **provisional** (§11.5) and non-normative: one
-  dataset, one modality, one task shape. Making it a MUST needs a second
-  modality and a task a vendor cannot overfit — the largest 1.0 work item. Note
-  also that a floor stated as a minimum `dim` would be actively wrong (§11.5).
+- The feature-space criterion (§11.5) is **relative and non-normative**, because
+  a second dataset showed that neither an absolute multiple of chance nor a
+  ranking of features transfers between sensor geometries. Making it normative
+  needs a genuinely different **modality** (both legs so far are sEMG) and a
+  task a vendor cannot overfit. Largest 1.0 work item, and now better bounded:
+  the thing to look for is a relative margin, not a score.
+- Enrollment data volume saturates around ~100 single-session trials on Hyser
+  (P@1 0.132 at ~40 trials, 0.164 at ~100, 0.166 at ~200). That bounds the
+  data-volume half of R-7.5.1's parameter; the donning-diversity half still does
+  not have a dataset (two sessions per subject is not a learning curve).
+- Whether a second donning helps or hurts enrollment is **not resolved**: Hyser
+  cross-day vs same-day came out −0.015 with CI [−0.039, +0.011] over 6 pairs,
+  i.e. no detectable effect at this power, which contradicts neither exp-22's
+  positive nor a null.
 - Self-test (R-5.7) proves the transform is unchanged. It does not prove the
   transform is applied to real acquisition — a device could pass self-test and
   still stream garbage. Detecting that needs a physical fixture.

@@ -33,6 +33,10 @@
             "side": { "enum": ["left", "right", "midline", "bilateral", "n/a"] },
             "arrangement": { "enum": ["circumferential", "linear", "grid", "scattered", "single"] },
             "reference": { "type": "string", "minLength": 1 },
+            "geometry_id": {
+              "type": "string",
+              "description": "R-4.2.1 — required for ase.opaque.v1: identical across units whose arrangement is interchangeable"
+            },
             "positions": {
               "type": "array",
               "items": {

@@ -73,7 +73,12 @@ function checkMontage(sig) {
   if (!m.reference) fail("R-4.2", "montage.reference missing");
 
   if (m.system === "ase.opaque.v1") {
-    return warn("R-4.2", "montage system is ase.opaque.v1: conformant, but not montage-comparable with any device");
+    if (!m.geometry_id) {
+      fail("R-4.2.1", "ase.opaque.v1 without geometry_id: not comparable even with another unit of the same model");
+    } else {
+      pass("R-4.2.1", `opaque montage carries geometry_id "${m.geometry_id}" — comparable within model, not across`);
+    }
+    return warn("R-4.2", "montage system is ase.opaque.v1: not montage-comparable across models");
   }
   const need = POS_KEYS[m.system];
   const pos = m.positions;
@@ -87,6 +92,16 @@ function checkMontage(sig) {
     return fail("R-4.2", `montage.positions ch ${bad.ch} missing ${need.join("/")} required by ${m.system}`);
   }
   pass("R-4.2", `montage ${m.system} ${m.site}/${m.side}, ${pos.length} positions — comparable`);
+
+  // R-4.2.3: axial placement is not permutation-like, so it must be real.
+  if (m.system === "ase.limb.v1") {
+    const axial = pos.map((p) => p.axial_mm);
+    if (axial.every((v) => v === axial[0]) && m.arrangement !== "circumferential") {
+      warn("R-4.2.3", "every channel declares the same axial_mm on a non-circumferential array — check this is real and not a placeholder");
+    } else {
+      pass("R-4.2.3", `axial extent ${Math.min(...axial)}–${Math.max(...axial)} mm declared`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- §4.3 clock

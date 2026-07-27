@@ -16,7 +16,8 @@
       "site": "forearm",
       "side": "right",
       "arrangement": "circumferential",
-      "reference": "differential-adjacent"
+      "reference": "differential-adjacent",
+      "geometry_id": "example.band2.rev-c"
     }
   },
   "clock": {

@@ -88,6 +88,21 @@ Third same-day revision — the remaining measurable open issues:
   written down — a floor protects the low-adherence tail, not the median. One
   parameter (the ~20-donning enrollment target) remains unmeasured, with the
   reason it cannot be measured on public data stated.
+Fourth same-day revision — **a withdrawal**:
+
+- **§11.5's absolute floor of "≥ 3.5× chance" is withdrawn**, one revision after
+  being proposed, because replicating on Hyser HD-sEMG (256-ch grid, 3 subjects,
+  6 pairs) broke it: Hyser's *best* feature set reaches 2.3× chance, so the
+  threshold would have failed a perfectly good feature space. The ranking of
+  individual features does not transfer either — MAV-only is the best set on DB5
+  and near-chance on Hyser. What replicated is **relative**: a real feature space
+  beats its own channel-mean reduction with a CI excluding zero on both datasets
+  (+0.153 and +0.051), and 8-bit quantisation is free on both. The criterion is
+  restated in that form. Both legs are still sEMG, so "second modality" remains
+  the open 1.0 item, now better bounded: look for a relative margin, not a score.
+- Enrollment data volume saturates around ~100 single-session trials (Hyser),
+  which bounds the data-volume half of R-7.5.1's parameter. The
+  donning-diversity half still has no dataset.
 - Numbering, scope, and BCP 14 citation fixes: §3 requirements are now labelled
   R-3.1–R-3.3 (the suite already emitted "R-3"), conformance scope in R-11.1
   covers §§3–10 and Appendix A rather than §§4–7.
