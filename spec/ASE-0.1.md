@@ -260,9 +260,22 @@ required and MUST NOT be assumed by a consumer.
 > real re-donning changes skin contact too, and that is the larger effect
 > (see R-6.2).
 
-Tolerance for comparability beyond the rotation case is not fixed by this
-document; it belongs to the consumer of the data. The descriptor's job is to
-make the question answerable.
+**R-4.2.3 (axial placement).** Unlike rotation, displacement *along* the limb is
+not permutation-like and nothing about it is free. `axial_mm` MUST be declared
+for every channel in `ase.limb.v1`, and a consumer comparing two montages MUST
+treat differing `axial_mm` as a real difference rather than a labelling detail.
+
+> Measured (same setup; DB5 wears two Myo rings at different heights on the
+> forearm, which is exactly an axial displacement of one ring): ring-to-ring at
+> the **same** height transfers at P@1 0.245, at a **different** height 0.229 —
+> −0.016, CI [−0.024, −0.008], retaining 93.4%. Smaller than one might expect,
+> and unlike rotation it does not vanish. Note the baseline is lower than
+> R-4.2.2's because a single 8-electrode ring carries less than both rings
+> together; the comparison is like-for-like within this table.
+
+Tolerance for comparability beyond the rotation and axial cases is not fixed by
+this document; it belongs to the consumer of the data. The descriptor's job is
+to make the question answerable.
 
 **R-4.3 (clock declaration).** The descriptor MUST carry a `clock` block stating
 whether the device has a real-time clock (`rtc`), the epoch of its monotonic
@@ -305,11 +318,23 @@ host place device time on its own clock and estimate drift.
 > smaller than that over a session. Making `time_echo` mandatory would impose
 > firmware work to protect a tolerance the task does not appear to need.
 >
-> The limit of the evidence: DB5 repetitions last seconds, so this bounds the
-> *gesture-retrieval* regime only. Continuous decoding, and anything that pairs
-> two people's signals sample-by-sample rather than event-by-event, is not
-> covered and could easily invert the conclusion — which is why the command is
-> specified now and merely not required.
+> That first result used whole-repetition windows seconds long, so it was
+> re-run at the window lengths this document actually uses. It did not invert:
+>
+> | window | offset 25 ms | 100 ms | 200 ms | 400 ms |
+> | --- | --- | --- | --- | --- |
+> | 200 ms | 102% | 103% | 100% | **89%**, CI [−0.032, −0.008] |
+> | 100 ms | 103% | 103% | 98% | **87%**, CI [−0.030, −0.006] |
+>
+> The tolerance is ~200 ms and is set by the movement, not by the window
+> length — shortening the window from 200 ms to 100 ms does not tighten it.
+> Only at 400 ms does the window slide far enough off the movement to cost
+> 11–13%. Small offsets score marginally *above* aligned because they skip the
+> onset transient, which is a real effect and not noise.
+>
+> The residual limit: every measurement here pairs two people event-by-event.
+> A workload that pairs them sample-by-sample is untested, and remains the case
+> that would make this a MUST.
 
 **R-5.3** The device MUST document typical and worst-case sensor-to-host
 latency, and MUST NOT reorder frames. Gaps MUST be visible as `seq` gaps, never
@@ -458,18 +483,33 @@ and it is not the intent.
 > sessions*, not by compute — cross-day and cross-donning variation is the
 > dominant term, so sessions must be spread across distinct days.
 >
-> Taking ~20 distinct donning sessions as the enrollment target and consumer
-> wear at ~3 sessions/week gives ~7 weeks of active wear. Doubling for interruption
-> (travel, illness, a device left in a drawer) gives ~14 weeks ≈ 90 days.
+> Wear frequency is now sourced rather than assumed: Rock Health's 2025
+> Consumer Adoption Survey (N = 8,000, fielded December 2025) reports **83% of
+> wearable owners wear their device five or more days per week**, 59% always or
+> nearly always. A device removed nightly or for charging is donned at least
+> once per worn day, so ≥5 donnings/week is the right figure for a typical
+> owner — not the 3/week this document assumed in its first draft.
 >
-> Both parameters are estimates, not measurements: 20 sessions is extrapolated
-> from fitting behaviour observed offline, and 3/week is an assumption about
-> consumer wear with no citation behind it. The number is therefore a **policy
-> floor derived from stated assumptions**, and it is stated that way
-> deliberately — a reader who disagrees with either parameter can see exactly
-> which one to argue with. The completion condition, not the day count, is the
-> substantive requirement; the floor only stops a vendor from declaring
-> re-enrollment "complete" the moment it ships.
+> Recomputing: ~20 donning sessions at ≥5/week is ~4 weeks of active wear, and
+> doubling for interruption gives ~8 weeks ≈ 56 days. **That is shorter than the
+> 90-day floor, and the floor is kept anyway** — deliberately, because a floor
+> exists to protect the worst case, not the median. The same literature that
+> gives the median gives the tail: adherence studies consistently find a
+> substantial low-adherence group (~29% in the SafeHeart ICD cohort over six
+> months), and consumer wearables are widely abandoned within about two months.
+> 90 days covers the median with margin and still does not cover the deepest
+> tail.
+>
+> What remains unmeasured is the **20 donning sessions** itself; it is
+> extrapolated from fitting behaviour observed offline, not measured. The public
+> cross-day EMG datasets carry two sessions per subject, which cannot show where
+> a learning curve saturates. Settling it needs a many-donning dataset — the
+> registration-gated Ninapro DB6 (10 sessions over 5 days) is the closest — or a
+> vendor's own enrollment telemetry.
+>
+> The completion condition, not the day count, is the substantive requirement;
+> the floor only stops a vendor from declaring re-enrollment "complete" the
+> moment it ships.
 
 **R-7.6 (export on demand).** Beyond live streaming, the user MUST be able to
 export retained data in one of the encodings of §9. Proprietary-only export
@@ -849,18 +889,18 @@ specification that stops improving, not one that stops being safe to implement.
 - The security model (§10.5) leaves same-machine isolation to the host OS. That
   is defensible for a read-only export spec and would be indefensible the moment
   any successor adds a write path.
-- The 90-day floor in R-7.5.1 rests on two estimated parameters (§7). The
-  enrollment-saturation one is measurable on a multi-session dataset and has not
-  been measured yet; the consumer wear-frequency one needs adherence literature,
-  not an experiment.
-- `time_echo` stays a SHOULD on gesture-granularity evidence (R-5.2.1). A
-  continuous-decoding or sample-paired workload could invert that, and is the
-  most likely requirement upgrade in 0.2.
+- The 90-day floor in R-7.5.1 now rests on **one** unmeasured parameter, not
+  two: wear frequency is sourced (Rock Health 2025, N = 8,000), but the
+  ~20-donning enrollment target is still an extrapolation. Public cross-day EMG
+  datasets carry two sessions per subject, which cannot locate a saturation
+  point; this needs a many-donning dataset or vendor telemetry.
+- `time_echo` stays a SHOULD, now on evidence at the document's own window
+  lengths rather than at gesture granularity (R-5.2.1). The untested case is a
+  workload that pairs two people sample-by-sample rather than event-by-event.
 - R-5.7 self-test proves the transform is unchanged, not that it is applied to
   real acquisition. Closing this needs a signal injected at the electrodes and a
   conformant device to inject it into — so it is blocked on a first implementer,
-  not on money or effort.
-- Axial placement along the limb is untested, unlike rotation (R-4.2.2).
+  not on money or effort. It is the only open issue with that property.
 
 ## Appendix A — `quality` per signal kind (normative)
 

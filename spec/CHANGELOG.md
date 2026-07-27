@@ -67,6 +67,27 @@ than assertions (Ninapro DB5, 6 subjects, 30 ordered pairs, chance 0.062):
 - **R-4.2.1 added:** opaque-montage devices declare a `geometry_id`, recovering
   within-model comparability. The first draft declared them incomparable even
   with another unit of the same model, which was both useless and untrue.
+Third same-day revision — the remaining measurable open issues:
+
+- **R-4.2.3 added (axial placement).** Rotation was measured; displacement along
+  the limb was not, and unlike rotation it is not permutation-like. DB5 wears two
+  rings at different forearm heights, which is exactly that displacement:
+  same-height 0.245 vs different-height 0.229, −0.016, CI [−0.024, −0.008],
+  retaining 93.4%. Small, but it does not vanish, so `axial_mm` is required per
+  channel and must be treated as a real difference.
+- **R-5.2.1 re-tested at the document's own window lengths.** The previous
+  result used whole-repetition windows and carried a caveat that short windows
+  might invert it. They do not: at both 200 ms and 100 ms windows, offsets to
+  200 ms are free and only 400 ms costs (11–13%, CI excludes zero). The
+  tolerance is set by the movement, not the window. Caveat replaced with the one
+  case still untested — sample-by-sample pairing.
+- **R-7.5.1 derivation re-sourced.** The invented "3 sessions/week" is replaced
+  by Rock Health's 2025 Consumer Adoption Survey (N = 8,000): 83% of owners wear
+  five or more days per week. That recomputes the window to ~56 days, shorter
+  than the stated floor. The 90-day floor is kept anyway and the reason is now
+  written down — a floor protects the low-adherence tail, not the median. One
+  parameter (the ~20-donning enrollment target) remains unmeasured, with the
+  reason it cannot be measured on public data stated.
 - Numbering, scope, and BCP 14 citation fixes: §3 requirements are now labelled
   R-3.1–R-3.3 (the suite already emitted "R-3"), conformance scope in R-11.1
   covers §§3–10 and Appendix A rather than §§4–7.
