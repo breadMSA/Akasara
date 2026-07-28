@@ -595,25 +595,37 @@ the resulting quantisation exceeds its declared self-test `tolerance`, and MUST
 declare in `t1` which encodings are lossless for its feature space. A host
 receiving a lossy encoding cannot verify R-5.7 from the stream.
 
-> Why the narrow encodings are not a tidiness feature (non-normative). Measured
-> 2026-07-28 on a consumer handset over a tethered cellular uplink, one location,
-> one carrier: a 4096-byte payload cost **+258 ms** over a 256-byte one to the
-> nearest reachable endpoint, and +290 ms to the nearest datacentre region. The
-> cost is in the uplink — `time_starttransfer` tracked `time_total` to within a
-> millisecond, so the time went into getting the request out, not into the far
-> side answering. Over a wired link the same two sizes were indistinguishable,
-> which is why this does not show up on a developer's desk.
+> Why the narrow encodings exist, with the measurement that produced the number
+> and the one that cut it down (non-normative). Payload width costs real time on
+> a cellular uplink and costs nothing on a wired link, which is why it does not
+> surface on a developer's desk. Measured 2026-07-28, consumer handsets, one
+> location, comparing a 256-byte payload against a 4096-byte one — the sizes of
+> an 8-bit and a float32 1024-dimension vector — to the nearest datacentre
+> region:
 >
-> A 1024-dimension float32 vector is 4 KB. On that link it does not fit a live
-> conversational budget and an 8-bit encoding of the same vector does. That is
-> the whole reason `venc` carries narrow options, and R-9.1 is what stops a
-> vendor reaching for them past the point where the values still mean what the
-> feature space says they mean.
+> | link | 256 B | 4096 B | cost of the wider payload |
+> | --- | --- | --- | --- |
+> | wired reference | 46 ms | 46 ms | none |
+> | tethered 4G (radio belonging to a second handset) | 167 ms | 457 ms | +290 ms |
+> | **native 4G** | **122 ms** | **183 ms** | **+61 ms** |
 >
-> Caveats, because one measurement is one measurement: a single network, a
-> single time of day, and a tethered radio belonging to a second handset. The
-> **shape** — uplink-bound, so payload width is the lever — is expected to be
-> portable; the milliseconds are not.
+> The first cellular run was tethered, and tethering — not the radio generation —
+> turned out to be most of the penalty. The honest number is the native one:
+> **+61 ms**, not the +290 ms the tethered run suggested. It is still an uplink
+> effect (`time_starttransfer` tracks `time_total` to within a millisecond, so
+> the time goes into getting the request out, not into the far side answering),
+> and it is still worth having. It is not the difference between workable and
+> unworkable that the first run implied.
+>
+> So: narrow encodings buy roughly 60 ms per exchange on a 4G uplink against a
+> nearby region. Worth taking, not load-bearing. R-9.1 is what stops a vendor
+> taking it past the point where the values still mean what the feature space
+> says they mean.
+>
+> Two measurements are still two measurements: one location, one carrier, one
+> time of day, and a p95 roughly 2–3× the p50 in every cell. The **shape** —
+> uplink-bound, so payload width is the lever — is expected to travel. The
+> milliseconds are not.
 
 **R-9.2** Unknown `type` values and unknown trailer bits MUST be skippable: a
 receiver that does not understand a message MUST be able to discard it using
