@@ -595,6 +595,26 @@ the resulting quantisation exceeds its declared self-test `tolerance`, and MUST
 declare in `t1` which encodings are lossless for its feature space. A host
 receiving a lossy encoding cannot verify R-5.7 from the stream.
 
+> Why the narrow encodings are not a tidiness feature (non-normative). Measured
+> 2026-07-28 on a consumer handset over a tethered cellular uplink, one location,
+> one carrier: a 4096-byte payload cost **+258 ms** over a 256-byte one to the
+> nearest reachable endpoint, and +290 ms to the nearest datacentre region. The
+> cost is in the uplink — `time_starttransfer` tracked `time_total` to within a
+> millisecond, so the time went into getting the request out, not into the far
+> side answering. Over a wired link the same two sizes were indistinguishable,
+> which is why this does not show up on a developer's desk.
+>
+> A 1024-dimension float32 vector is 4 KB. On that link it does not fit a live
+> conversational budget and an 8-bit encoding of the same vector does. That is
+> the whole reason `venc` carries narrow options, and R-9.1 is what stops a
+> vendor reaching for them past the point where the values still mean what the
+> feature space says they mean.
+>
+> Caveats, because one measurement is one measurement: a single network, a
+> single time of day, and a tethered radio belonging to a second handset. The
+> **shape** — uplink-bound, so payload width is the lever — is expected to be
+> portable; the milliseconds are not.
+
 **R-9.2** Unknown `type` values and unknown trailer bits MUST be skippable: a
 receiver that does not understand a message MUST be able to discard it using
 the length its transport provides, and MUST NOT desynchronise.
