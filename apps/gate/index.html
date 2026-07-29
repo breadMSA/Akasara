@@ -449,6 +449,19 @@ function transportList(state) {
   return list;
 }
 
+/* The descriptor that accompanies a release describes the release, not the
+ * device. A grant withholding t_wall_ms strips wall time from every frame, so a
+ * descriptor still claiming rtc:true contradicts the frames shipped beside it
+ * and the capture fails R-5.1 — the gate's own privacy setting would be
+ * manufacturing non-conformant exports. rtc:false is the true statement about
+ * what left, and it is what §5.1 asks a source without wall time to say.
+ */
+function capabilityUnderGrant(state, g) {
+  const cap = buildCapability(state);
+  if (!g.fields.t_wall_ms) cap.clock = { ...cap.clock, rtc: false };
+  return cap;
+}
+
 const BUILD = "0.1.0";
 
 /* ======================================================================= state */
@@ -663,6 +676,15 @@ function release(g, what, n) {
   saveGrants();
   logEvent("release", { id: g.id, peer: g.peer, what, frames: n });
   renderGrants();
+  // A grant spent by its own export drops out of the picker and greys every
+  // export button. Say so: silently disabling the controls that just worked
+  // reads as a broken page rather than as a permission that ran out.
+  if (grantStatus(g) === "spent") {
+    $("export-note").textContent =
+      `Grant ${g.id} is spent — its ${g.max_frames}-frame allowance went to ` +
+      `${what}. Export the zero-cost artefacts (capability, self-test) before ` +
+      `frames, or write a larger allowance, then create a new grant.`;
+  }
 }
 
 function refuse(what, why) {
@@ -924,7 +946,7 @@ function currentGrant() {
 function exportCapability() {
   const g = currentGrant();
   if (!g) return;
-  download("capability.json", JSON.stringify(buildCapability(state), null, 2), "application/json");
+  download("capability.json", JSON.stringify(capabilityUnderGrant(state, g), null, 2), "application/json");
   release(g, "capability", 0);
 }
 
@@ -954,7 +976,7 @@ async function exportBundle() {
     ase_version: "0.1",
     released_at: new Date().toISOString(),
     grant: { id: g.id, peer: g.peer, purpose: g.purpose, expires_at: g.expires_at },
-    capability: buildCapability(state),
+    capability: capabilityUnderGrant(state, g),
     selftest_output: state.lastSelftest ?? runSelftest(NOMINAL_RATE[state.sourceKind]),
     frames,
   };
@@ -994,7 +1016,7 @@ function toggleStream() {
     // Declared only once the socket is really open, so the descriptor never
     // promises a transport that is not there.
     state.bridgeUri = url.replace(/\/device\/?$/, "");
-    sock.send(JSON.stringify({ type: "capability", capability: buildCapability(state) }));
+    sock.send(JSON.stringify({ type: "capability", capability: capabilityUnderGrant(state, g) }));
     logEvent("stream", { id: g.id, peer: g.peer, uri: state.bridgeUri });
     setStreamState(`streaming to ${g.peer}`);
   };

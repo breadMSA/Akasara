@@ -33,6 +33,7 @@ function loadPureModule() {
   const src = html.slice(a, b + END.length);
   const exportNames = [
     "DURATION_S", "selftestInput", "t1Transform", "runSelftest", "buildCapability",
+    "capabilityUnderGrant",
     "FEATURE_SPACE", "CHANNELS", "DIM", "WINDOW_MS", "STRIDE_MS", "NOMINAL_RATE", "FULL_SCALE",
   ];
   return new Function(`${src}\nreturn {${exportNames.join(",")}};`)();
@@ -125,6 +126,28 @@ test("the simulated source is labelled in the descriptor and cannot pass as a ca
   assert.equal(sim["akasara.source"], "simulated");
   assert.equal(imu["akasara.source"], "device-imu");
   assert.notEqual(sim.model, imu.model);
+});
+
+/** Found on a real phone: a grant with `include t_wall_ms` left unchecked
+ *  exported frames with no wall time under a descriptor still declaring
+ *  rtc:true, and the suite failed the capture on R-5.1. Withholding a field is
+ *  the gate working; producing an inconsistent capture is not. */
+test("a grant withholding t_wall_ms still exports a conformant capture (R-5.1)", () => {
+  const state = makeState({ bridgeUri: "ws://127.0.0.1:8765" });
+  const grant = { fields: { t_wall_ms: false, quality: true, session_id: true } };
+  const cap = app.capabilityUnderGrant(state, grant);
+  assert.equal(cap.clock.rtc, false, "descriptor must not claim an RTC whose output is withheld");
+
+  const frames = makeFrames(app.buildCapability(state)).map(({ t_wall_ms, ...f }) => f);
+  const { code, out } = runSuite(cap, frames, app.runSelftest(cap.signal.sample_rate_hz));
+  assert.equal(code, 0, `withholding wall time must not make the capture non-conformant:\n${out}`);
+
+  // And the inverse must still be caught: keeping the field means declaring it.
+  const kept = app.capabilityUnderGrant(state, { fields: { t_wall_ms: true } });
+  assert.equal(kept.clock.rtc, true);
+  const stripped = runSuite(kept, frames, app.runSelftest(kept.signal.sample_rate_hz));
+  assert.equal(stripped.code, 1);
+  assert.match(stripped.out, /R-5\.1/);
 });
 
 test("quality is per channel, not per feature dimension (R-5.6)", () => {

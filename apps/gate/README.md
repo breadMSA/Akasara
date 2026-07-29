@@ -96,6 +96,18 @@ A grant names one recipient, one purpose, an expiry, and a frame allowance. Ther
 is no allow-all and no "remember this choice": a permission that cannot lapse is
 how consent quietly becomes permanent.
 
+A grant is a frame budget, and exporting frames spends what is left of it. A
+grant whose allowance is smaller than the capture is therefore consumed by its
+own first frame export, which is intended; the export panel says so rather than
+greying its buttons without explanation. `capability.json` and `selftest.json`
+cost nothing, so exporting those first leaves the allowance for the frames.
+
+Withholding a field redacts the descriptor too, not only the frames.
+`capabilityUnderGrant()` declares `clock.rtc: false` when a grant withholds
+`t_wall_ms`, because a descriptor claiming an RTC beside frames carrying no wall
+time is a capture that fails R-5.1 — the privacy control would otherwise be
+manufacturing non-conformant exports.
+
 Every export path — the three files, the signed bundle, and the live stream —
 goes through `applyGrant()`. Redaction happens there rather than at each call
 site, so a new export path cannot forget it. Withheld fields are dropped, except

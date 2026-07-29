@@ -2,7 +2,7 @@
 /**
  * ASE-0.1 reference conformance suite.
  *
- * Usage:  node check.mjs <capability.json> <frames.jsonl>
+ * Usage:  node check.mjs <capability.json> <frames.jsonl> [selftest.json]
  *
  * Zero dependencies, Node >= 18. Checks are keyed to the clause numbers in
  * ASE-0.1.md so a failure names the requirement it violates. Every check is
