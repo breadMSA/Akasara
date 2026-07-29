@@ -74,7 +74,15 @@ Run the spec's own suite over the three files this app exports:
 node spec/conformance/check.mjs capability.json frames.jsonl selftest.json
 ```
 
-With the bridge connected: **CONFORMANT, 17 pass, 0 fail, 2 warn.**
+Measured on an S21 FE, real IMU, streaming over the bridge:
+**CONFORMANT, 17 pass, 0 fail, 2 warn.**
+
+Running `bridge.mjs` is not what makes R-7.1 pass. The descriptor declares the
+loopback transport only while the socket is actually open, so **Start streaming**
+has to be pressed before `capability.json` is exported, and **Stop streaming**
+withdraws the declaration again. That is deliberate — a descriptor promising a
+transport nobody can reach is worse than one admitting it has none — but it does
+mean the export order matters.
 
 The two warnings are real and are not going away:
 
