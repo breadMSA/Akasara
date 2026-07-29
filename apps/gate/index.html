@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate — ASE-0.1 source and consent gate</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --line: #c9c9c2;
+    --accent: #0b57d0;
+    --deny: #b3261e;
+    --allow: #1a6b32;
+    --warn: #8a6100;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    max-width: 780px;
+    padding: 16px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  .sub { color: #555; margin: 0 0 20px; font-size: 0.95rem; }
+  section {
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 0 0 14px;
+    background: #fff;
+  }
+  button {
+    font: inherit;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 4px solid var(--accent);
+    outline-offset: 2px;
+  }
+  button.primary { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  button.danger { border-color: var(--deny); color: var(--deny); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  label { font-size: 0.9rem; }
+  input[type=text], input[type=number], select {
+    font: inherit;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input[type=text] { min-width: 160px; }
+  input[type=number] { width: 96px; }
+  dl.stats {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+    margin: 10px 0 0;
+    font-size: 0.9rem;
+  }
+  dl.stats dt { color: #555; }
+  dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .note {
+    font-size: 0.85rem;
+    color: #555;
+    border-left: 3px solid var(--line);
+    padding-left: 10px;
+    margin: 10px 0 0;
+  }
+  .verdict { font-weight: 600; }
+  .ok { color: var(--allow); }
+  .bad { color: var(--deny); }
+  .warn { color: var(--warn); }
+  ul.plain { list-style: none; margin: 10px 0 0; padding: 0; }
+  ul.plain li {
+    border: 2px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+  }
+  ul.plain li.revoked { opacity: 0.55; border-style: dashed; }
+  ul.plain li.expired { opacity: 0.55; border-style: dashed; }
+  .grant-head { font-weight: 600; margin-bottom: 2px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+  pre.log {
+    max-height: 220px;
+    overflow: auto;
+    background: #f2f2ee;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    margin: 10px 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  table.checks { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; }
+  table.checks td { padding: 3px 6px 3px 0; vertical-align: top; }
+  table.checks td:first-child { width: 3.5rem; font-weight: 600; }
+  table.checks td:nth-child(2) { width: 5rem; color: #555; }
+  .gate-state {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 2px solid;
+  }
+  .gate-state.deny { color: var(--deny); border-color: var(--deny); }
+  .gate-state.allow { color: var(--allow); border-color: var(--allow); }
+  fieldset { border: 2px solid var(--line); border-radius: 10px; margin: 10px 0 0; padding: 8px 10px; }
+  legend { font-size: 0.85rem; padding: 0 4px; color: #555; }
+  .checks-scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<h1>Gate</h1>
+<p class="sub">
+  An ASE-0.1 signal source and the consent gate in front of it. The phone's own
+  IMU stands in for a body-signal wearable: it produces real T1 feature frames in
+  a pinned feature space, and nothing leaves this device unless a grant you wrote
+  says it may. Default is deny. No account, no network, no server.
+</p>
+
+<section id="sec-source">
+  <h2>1 · Source</h2>
+  <div class="row">
+    <button id="btn-start" class="primary">Start session</button>
+    <button id="btn-stop" disabled>Stop</button>
+    <label for="sel-source">Signal</label>
+    <select id="sel-source">
+      <option value="imu">Device IMU</option>
+      <option value="sim">Simulated (no sensor)</option>
+    </select>
+  </div>
+  <dl class="stats">
+    <dt>Session</dt><dd id="st-session">—</dd>
+    <dt>Don count</dt><dd id="st-don">0</dd>
+    <dt>Frames held</dt><dd id="st-frames">0</dd>
+    <dt>Measured sample rate</dt><dd id="st-rate">—</dd>
+    <dt>Frame rate</dt><dd id="st-fps">—</dd>
+    <dt>Latest quality</dt><dd id="st-quality">—</dd>
+    <dt>Latest values</dt><dd id="st-values" class="mono">—</dd>
+  </dl>
+  <p class="note" id="source-note">
+    Frames are held in memory only. Reloading this page discards them, which is
+    the intended failure mode: nothing here is a store.
+  </p>
+</section>
+
+<section id="sec-selftest">
+  <h2>2 · Feature-space self-test (R-5.7)</h2>
+  <div class="row">
+    <button id="btn-selftest">Run self-test</button>
+    <span id="st-selftest-verdict" class="verdict">not run</span>
+  </div>
+  <p class="mono" id="st-selftest-vec">—</p>
+  <p class="note">
+    Runs the production T1 transform over <span class="mono">ase.selftest.v1</span>
+    and compares it to the vector the capability descriptor publishes. Matching it
+    today only proves the descriptor is self-consistent — the clause earns its keep
+    later, when the same vector is re-run after a change to prove the transform did
+    or did not move under an unchanged <span class="mono">feature_space</span>.
+  </p>
+</section>
+
+<section id="sec-gate">
+  <h2>3 · Consent gate <span id="gate-state" class="gate-state deny">DEFAULT DENY</span></h2>
+  <p class="note" style="margin-top:0">
+    A grant names one recipient and one purpose, and expires. Everything not
+    covered by a live grant is refused, including by this page's own export
+    buttons.
+  </p>
+  <fieldset>
+    <legend>New grant</legend>
+    <div class="row">
+      <label for="g-peer">Recipient</label>
+      <input type="text" id="g-peer" placeholder="who receives it" autocomplete="off">
+      <label for="g-purpose">Purpose</label>
+      <input type="text" id="g-purpose" placeholder="what for" autocomplete="off">
+    </div>
+    <div class="row">
+      <label for="g-minutes">Expires in</label>
+      <input type="number" id="g-minutes" value="15" min="1" max="1440"> min
+      <label for="g-max">Max frames</label>
+      <input type="number" id="g-max" value="500" min="1" max="100000">
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="g-quality" checked> include <span class="mono">quality</span></label>
+      <label><input type="checkbox" id="g-session" checked> include real <span class="mono">session_id</span></label>
+      <label><input type="checkbox" id="g-wall"> include <span class="mono">t_wall_ms</span></label>
+    </div>
+    <div class="row">
+      <button id="btn-grant" class="primary">Create grant</button>
+    </div>
+  </fieldset>
+  <ul class="plain" id="grant-list"></ul>
+</section>
+
+<section id="sec-export">
+  <h2>4 · Export</h2>
+  <div class="row">
+    <label for="sel-grant">Under grant</label>
+    <select id="sel-grant"><option value="">— none —</option></select>
+  </div>
+  <div class="row">
+    <button id="btn-x-cap" disabled>capability.json</button>
+    <button id="btn-x-frames" disabled>frames.jsonl</button>
+    <button id="btn-x-selftest" disabled>selftest.json</button>
+    <button id="btn-x-bundle" disabled>signed bundle</button>
+  </div>
+  <p class="note" id="export-note">Select a live grant to enable export.</p>
+  <fieldset>
+    <legend>Live stream (ASE §10.3 loopback)</legend>
+    <div class="row">
+      <label for="bridge-url">Bridge</label>
+      <input type="text" id="bridge-url" value="ws://127.0.0.1:8765/device" autocomplete="off" style="flex:1">
+    </div>
+    <div class="row">
+      <button id="btn-stream" disabled>Start streaming</button>
+      <span id="stream-state">not connected</span>
+    </div>
+    <p class="note" style="margin-top:8px">
+      Streaming is egress like any other: it runs under the same grant, obeys the
+      same redaction, spends the same frame allowance, and stops by itself the
+      moment the grant is revoked, expires, or runs out. Run
+      <span class="mono">node bridge.mjs</span> alongside this page; while it is
+      connected the capability descriptor declares a real local transport and
+      R-7.1 passes.
+    </p>
+  </fieldset>
+</section>
+
+<section id="sec-verify">
+  <h2>5 · Conformance</h2>
+  <div class="row">
+    <button id="btn-verify">Check this capture</button>
+    <span id="verify-verdict" class="verdict">not run</span>
+  </div>
+  <div class="checks-scroll"><table class="checks"><tbody id="verify-rows"></tbody></table></div>
+  <p class="note">
+    A subset of <span class="mono">spec/conformance/check.mjs</span>, run in the
+    page so a phone with no toolchain can see the verdict. It is not a substitute
+    for the suite: export the three files and run
+    <span class="mono">node spec/conformance/check.mjs capability.json frames.jsonl selftest.json</span>
+    for the authoritative answer.
+  </p>
+</section>
+
+<section id="sec-ledger">
+  <h2>6 · Audit ledger</h2>
+  <div class="row">
+    <button id="btn-ledger-export">Export ledger</button>
+    <button id="btn-ledger-clear" class="danger">Clear ledger</button>
+  </div>
+  <pre class="log" id="ledger-view">empty</pre>
+  <p class="note">
+    Every grant, refusal, release and revocation, appended in order and kept on
+    this device. It records what left, never what was in it.
+  </p>
+</section>
+
+<script>
+"use strict";
+
+/* ============================================================ ase.selftest.v1
+ * Exact port of spec/conformance/selftest.mjs. Kept as a port rather than an
+ * import so this file stays openable from disk with no server and no build.
+ */
+const DURATION_S = 2.0;
+
+function* xorshift32(seed) {
+  let x = seed >>> 0;
+  for (;;) {
+    x ^= (x << 13) >>> 0;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= (x << 5) >>> 0;
+    x >>>= 0;
+    yield (x / 0xffffffff) * 2 - 1;
+  }
+}
+
+function selftestInput(channels, fs) {
+  const n = Math.round(DURATION_S * fs);
+  const out = [];
+  for (let c = 0; c < channels; c++) {
+    const rng = xorshift32(c + 1);
+    const row = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const r = rng.next().value;
+      row[i] =
+        0.5 * Math.sin((2 * Math.PI * (20 + 7 * c) * i) / fs) +
+        0.2 * Math.sin((2 * Math.PI * (150 + 11 * c) * i) / fs) +
+        0.05 * r;
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/* ==================================================== akasara.imu.tdfeat.v1
+ * The production T1 transform. Two time-domain features per channel over a
+ * 200 ms window, 100 ms stride, on normalised full-scale input:
+ *
+ *   values[2c]     = RMS  = sqrt(mean(x^2))
+ *   values[2c + 1] = WL   = mean(|x[i] - x[i-1]|)      (0 when fewer than 2 samples)
+ *
+ * Fixed order, channel-major. No filtering, no per-user state, no adaptation,
+ * no normalisation fitted to anybody: the same input gives the same output on
+ * every device and every day, which is the only property R-5.4 can be pinned to.
+ * Every path that produces a T1 value — live capture and self-test alike — goes
+ * through this one function, as R-5.7 requires.
+ */
+const FEATURE_SPACE = "akasara.imu.tdfeat.v1";
+const CHANNELS = 6;                 // ax ay az gx gy gz
+const DIM = CHANNELS * 2;
+const WINDOW_MS = 200;
+const STRIDE_MS = 100;
+
+// ±1.0 in normalised full scale. Declared, not guessed: values outside clip.
+const FULL_SCALE = { accel: 39.24, gyro: 2000 };   // m/s^2 (±4 g), deg/s
+
+function t1Transform(perChannel) {
+  const values = new Array(perChannel.length * 2);
+  perChannel.forEach((x, c) => {
+    const n = x.length;
+    let sumSq = 0;
+    for (let i = 0; i < n; i++) sumSq += x[i] * x[i];
+    let sumAbsDiff = 0;
+    for (let i = 1; i < n; i++) sumAbsDiff += Math.abs(x[i] - x[i - 1]);
+    values[2 * c] = n > 0 ? Math.sqrt(sumSq / n) : 0;
+    values[2 * c + 1] = n > 1 ? sumAbsDiff / (n - 1) : 0;
+  });
+  return values;
+}
+
+/* R-5.7.1 — the last analysis window ending at or before t = 2.000 s, never an
+ * average and never the first window. Window membership is the same rule the
+ * live windower uses: t_end - WINDOW_MS < t <= t_end. */
+function runSelftest(fs) {
+  const input = selftestInput(CHANNELS, fs);
+  const endS = DURATION_S;
+  const startS = endS - WINDOW_MS / 1000;
+  const first = Math.floor(startS * fs) + 1;
+  const last = Math.min(input[0].length - 1, Math.floor(endS * fs));
+  const sliced = input.map((row) => row.slice(first, last + 1));
+  return t1Transform(sliced).map((v) => Number(v.toFixed(6)));
+}
+
+/* ================================================================== capability
+ * Built from what the app is actually doing right now, never from a template.
+ * The transport list in particular is the live one: a browser cannot bind a
+ * loopback listener, so unless the §10.3 bridge is connected this descriptor
+ * honestly declares no local transport and fails R-7.1. That failure is the
+ * measured reason for the native build, not a thing to paper over.
+ */
+const NOMINAL_RATE = { imu: 60, sim: 100 };
+
+function buildCapability(state) {
+  const fs = NOMINAL_RATE[state.sourceKind];
+  return {
+    ase_version: "0.1",
+    vendor: "akasara",
+    model: state.sourceKind === "sim" ? "gate-web-sim" : "gate-web-imu",
+    firmware: BUILD,
+    tiers: ["t1"],
+    profiles: [],
+    signal: {
+      kind: "imu",
+      channels: CHANNELS,
+      sample_rate_hz: fs,
+      montage: {
+        system: "ase.opaque.v1",
+        site: "handheld",
+        side: "n/a",
+        arrangement: "single",
+        reference: "device-body-frame",
+        geometry_id: "akasara.phone.imu.v1",
+      },
+    },
+    t1: {
+      feature_space: FEATURE_SPACE,
+      dim: DIM,
+      window_ms: WINDOW_MS,
+      stride_ms: STRIDE_MS,
+      producer: "dsp",
+      adaptive: false,
+      documentation: "https://github.com/breadMSA/Akasara/blob/main/apps/gate/README.md",
+      latency_typ_ms: WINDOW_MS / 2,
+      latency_max_ms: WINDOW_MS + STRIDE_MS,
+      lossless_encodings: ["f32"],
+    },
+    clock: {
+      rtc: true,
+      mono_epoch: "session",
+      // Left undeclared on purpose: this build has not measured the host clock's
+      // drift, and R-4.3 would rather have a warning than a number nobody took.
+    },
+    selftest: {
+      input: "ase.selftest.v1",
+      expected: runSelftest(fs),
+      tolerance: 1e-6,
+    },
+    don_count: state.donCount,
+    transport: transportList(state),
+    requires_account: false,
+    requires_network: false,
+    developer_gate: false,
+    terms: {
+      cross_user_processing_permitted: true,
+      url: "https://github.com/breadMSA/Akasara/blob/main/spec/ASE-0.1.md",
+    },
+    "akasara.source": state.sourceKind === "sim" ? "simulated" : "device-imu",
+    // Vendor extension, present only once there is a measurement to report:
+    // sample_rate_hz above is the nominal rate the self-test vector is pinned to,
+    // and a null here would read as "measured, and it was nothing".
+    ...(state.measuredRate ? { "akasara.measured_rate_hz": Number(state.measuredRate.toFixed(2)) } : {}),
+  };
+}
+
+function transportList(state) {
+  const list = [{
+    uri: "file://export",
+    encodings: ["json"],
+    max_sustained_kbps: 100000,
+  }];
+  if (state.bridgeUri) {
+    list.unshift({ uri: state.bridgeUri, encodings: ["json"], max_sustained_kbps: 1000 });
+  }
+  return list;
+}
+
+const BUILD = "0.1.0";
+
+/* ======================================================================= state */
+const state = {
+  running: false,
+  sourceKind: "imu",
+  sessionId: null,
+  sessionStart: 0,
+  lastSeq: -1,
+  donCount: Number(localStorage.getItem("gate.don") || 0),
+  frames: [],
+  samples: [],          // {t: ms, v: [6]}
+  measuredRate: null,
+  bridgeUri: null,      // set when a §10.3 loopback bridge is connected
+  lastSelftest: null,
+  clipped: new Array(CHANNELS).fill(0),
+  received: 0,
+};
+
+const MAX_FRAMES = 20000;
+const $ = (id) => document.getElementById(id);
+
+/* ======================================================================= ledger
+ * Append-only, on this device, and deliberately content-free: it records that
+ * 500 frames went to a named recipient under a named grant, never the frames.
+ */
+const ledger = JSON.parse(localStorage.getItem("gate.ledger") || "[]");
+
+function logEvent(kind, detail) {
+  ledger.push({ at: new Date().toISOString(), kind, ...detail });
+  if (ledger.length > 500) ledger.splice(0, ledger.length - 500);
+  localStorage.setItem("gate.ledger", JSON.stringify(ledger));
+  renderLedger();
+}
+
+function renderLedger() {
+  const view = $("ledger-view");
+  if (ledger.length === 0) { view.textContent = "empty"; return; }
+  view.textContent = ledger
+    .slice(-60)
+    .map((e) => {
+      const { at, kind, ...rest } = e;
+      const tail = Object.entries(rest).map(([k, v]) => `${k}=${v}`).join(" ");
+      return `${at.slice(11, 19)}  ${kind.padEnd(9)} ${tail}`;
+    })
+    .join("\n");
+  view.scrollTop = view.scrollHeight;
+}
+
+/* ======================================================================= grants
+ * Default deny is not a setting. There is no allow-all, no "remember this
+ * choice", and no grant without an expiry — a permission that cannot lapse is
+ * how consent quietly becomes permanent.
+ */
+const grants = JSON.parse(localStorage.getItem("gate.grants") || "[]");
+for (const g of grants) if (!g.salt) g.salt = crypto.randomUUID();   // grants written before salts existed
+
+function saveGrants() { localStorage.setItem("gate.grants", JSON.stringify(grants)); }
+
+function grantLive(g) {
+  return !g.revoked_at && Date.parse(g.expires_at) > Date.now() && g.released < g.max_frames;
+}
+
+function grantStatus(g) {
+  if (g.revoked_at) return "revoked";
+  if (Date.parse(g.expires_at) <= Date.now()) return "expired";
+  if (g.released >= g.max_frames) return "spent";
+  return "live";
+}
+
+function createGrant() {
+  const peer = $("g-peer").value.trim();
+  const purpose = $("g-purpose").value.trim();
+  if (!peer || !purpose) {
+    $("export-note").textContent = "A grant needs a recipient and a purpose. Both, every time.";
+    return;
+  }
+  const minutes = Math.max(1, Number($("g-minutes").value) || 15);
+  const g = {
+    id: "g-" + crypto.randomUUID().slice(0, 8),
+    salt: crypto.randomUUID(),      // stays on this device; see pseudonym()
+    peer,
+    purpose,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + minutes * 60000).toISOString(),
+    max_frames: Math.max(1, Number($("g-max").value) || 500),
+    released: 0,
+    fields: {
+      quality: $("g-quality").checked,
+      session_id: $("g-session").checked,
+      t_wall_ms: $("g-wall").checked,
+    },
+    revoked_at: null,
+  };
+  grants.push(g);
+  saveGrants();
+  logEvent("grant", { id: g.id, peer: g.peer, purpose: g.purpose, max: g.max_frames, expires: g.expires_at.slice(11, 19) });
+  $("g-peer").value = "";
+  $("g-purpose").value = "";
+  renderGrants();
+}
+
+function revokeGrant(id) {
+  const g = grants.find((x) => x.id === id);
+  if (!g || g.revoked_at) return;
+  g.revoked_at = new Date().toISOString();
+  saveGrants();
+  logEvent("revoke", { id: g.id, peer: g.peer, released: g.released });
+  // Revocation has to reach a stream already in flight, not just future exports.
+  if (bridge.grantId === g.id && bridge.sock) stopStream("grant revoked");
+  renderGrants();
+}
+
+function renderGrants() {
+  const list = $("grant-list");
+  list.innerHTML = "";
+  for (const g of [...grants].reverse()) {
+    const status = grantStatus(g);
+    const li = document.createElement("li");
+    if (status !== "live") li.className = status === "revoked" ? "revoked" : "expired";
+    const dropped = Object.entries(g.fields).filter(([, on]) => !on).map(([k]) => k);
+    li.innerHTML =
+      `<div class="grant-head">${esc(g.peer)} — ${esc(g.purpose)}</div>` +
+      `<div class="mono">${g.id} · ${status} · ${g.released}/${g.max_frames} frames · ` +
+      `expires ${g.expires_at.slice(11, 16)}</div>` +
+      (dropped.length ? `<div>withholding: <span class="mono">${dropped.join(", ")}</span></div>` : "");
+    if (status === "live") {
+      const btn = document.createElement("button");
+      btn.className = "danger";
+      btn.textContent = "Revoke";
+      btn.style.marginTop = "8px";
+      btn.addEventListener("click", () => revokeGrant(g.id));
+      li.appendChild(btn);
+    }
+    list.appendChild(li);
+  }
+  const anyLive = grants.some(grantLive);
+  const badge = $("gate-state");
+  badge.textContent = anyLive ? `${grants.filter(grantLive).length} LIVE GRANT(S)` : "DEFAULT DENY";
+  badge.className = "gate-state " + (anyLive ? "allow" : "deny");
+  renderGrantPicker();
+}
+
+function renderGrantPicker() {
+  const sel = $("sel-grant");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— none —</option>';
+  for (const g of grants.filter(grantLive)) {
+    const o = document.createElement("option");
+    o.value = g.id;
+    o.textContent = `${g.peer} — ${g.purpose} (${g.max_frames - g.released} left)`;
+    sel.appendChild(o);
+  }
+  sel.value = [...sel.options].some((o) => o.value === prev) ? prev : "";
+  syncExportButtons();
+}
+
+function syncExportButtons() {
+  const g = grants.find((x) => x.id === $("sel-grant").value);
+  const ok = Boolean(g && grantLive(g));
+  for (const id of ["btn-x-cap", "btn-x-frames", "btn-x-selftest", "btn-x-bundle"]) {
+    $(id).disabled = !ok;
+  }
+  $("btn-stream").disabled = !ok && !bridge.sock;
+  $("export-note").textContent = ok
+    ? `Releasing to ${g.peer} for ${g.purpose}. ${g.max_frames - g.released} frames remain on this grant.`
+    : "Select a live grant to enable export.";
+}
+
+/* ================================================================== gate egress
+ * The one place a frame is allowed to become bytes that leave. Redaction is
+ * applied here, not at the call site, so a new export path cannot forget it.
+ */
+function applyGrant(frames, g) {
+  const allowance = Math.max(0, g.max_frames - g.released);
+  const taken = frames.slice(-allowance);
+  return taken.map((f) => {
+    const out = {
+      tier: f.tier,
+      t_mono_ns: f.t_mono_ns,
+      session_id: g.fields.session_id ? f.session_id : pseudonym(f.session_id, g.salt),
+      seq: f.seq,
+      feature_space: f.feature_space,
+      values: f.values,
+    };
+    if (g.fields.t_wall_ms) out.t_wall_ms = f.t_wall_ms;
+    if (g.fields.quality) out.quality = f.quality;
+    return out;
+  });
+}
+
+/* A withheld session id is replaced, not deleted: R-6.1 exists so a consumer can
+ * see where sessions break, and dropping the field entirely destroys that for no
+ * privacy gain. The substitute is stable within one grant and unlinkable across
+ * grants.
+ *
+ * The salt is per-grant, random, and never leaves this device. Deriving it from
+ * the grant id instead would have made that second property false: the grant id
+ * travels inside the bundle, so anyone who had once been given a real session id
+ * could recompute the pseudonym under any other grant and link the two. */
+function pseudonym(sessionId, salt) {
+  let h = 0x811c9dc5;
+  for (const ch of sessionId + "|" + salt) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return "p-" + h.toString(16).padStart(8, "0");
+}
+
+function release(g, what, n) {
+  g.released += n;
+  saveGrants();
+  logEvent("release", { id: g.id, peer: g.peer, what, frames: n });
+  renderGrants();
+}
+
+function refuse(what, why) {
+  logEvent("refuse", { what, why });
+  $("export-note").textContent = `Refused: ${why}`;
+}
+
+/* ==================================================================== sampling */
+function normalise(v, scale) {
+  const x = v / scale;
+  return x > 1 ? 1 : x < -1 ? -1 : x;
+}
+
+function onMotion(ev) {
+  const a = ev.accelerationIncludingGravity;
+  const r = ev.rotationRate;
+  if (!a || a.x === null) return;
+  const raw = [
+    normalise(a.x ?? 0, FULL_SCALE.accel),
+    normalise(a.y ?? 0, FULL_SCALE.accel),
+    normalise(a.z ?? 0, FULL_SCALE.accel),
+    normalise(r?.alpha ?? 0, FULL_SCALE.gyro),
+    normalise(r?.beta ?? 0, FULL_SCALE.gyro),
+    normalise(r?.gamma ?? 0, FULL_SCALE.gyro),
+  ];
+  pushSample(raw);
+}
+
+let simPhase = 0;
+function simTick() {
+  simPhase += 1;
+  const t = simPhase / NOMINAL_RATE.sim;
+  const raw = [];
+  for (let c = 0; c < CHANNELS; c++) {
+    raw.push(0.4 * Math.sin(2 * Math.PI * (1.5 + c * 0.7) * t) + 0.02 * (Math.random() * 2 - 1));
+  }
+  pushSample(raw);
+}
+
+function pushSample(raw) {
+  const t = performance.now();
+  for (let c = 0; c < CHANNELS; c++) {
+    if (Math.abs(raw[c]) >= 1) state.clipped[c] += 1;
+  }
+  state.received += 1;
+  state.samples.push({ t, v: raw });
+  const cutoff = t - (WINDOW_MS + 1000);
+  while (state.samples.length && state.samples[0].t < cutoff) state.samples.shift();
+}
+
+/* ==================================================================== windowing
+ * t_mono_ns refers to the END of the analysis window (R-5.2), and the window is
+ * closed on the wall of stride boundaries rather than on however many samples
+ * happened to arrive — a dropped sensor callback must show up as lower quality,
+ * not as a silently shorter window.
+ */
+let windowTimer = null;
+
+function emitFrame() {
+  const tEnd = performance.now();
+  const tStart = tEnd - WINDOW_MS;
+  const inWindow = state.samples.filter((s) => s.t > tStart && s.t <= tEnd);
+
+  const perChannel = [];
+  for (let c = 0; c < CHANNELS; c++) perChannel.push(inWindow.map((s) => s.v[c]));
+  const values = t1Transform(perChannel).map((v) => Number(v.toFixed(6)));
+
+  const nominal = NOMINAL_RATE[state.sourceKind];
+  const expected = Math.max(1, Math.round((WINDOW_MS / 1000) * nominal));
+  const completeness = Math.min(1, inWindow.length / expected);
+  const quality = [];
+  for (let c = 0; c < CHANNELS; c++) {
+    const clipFrac = inWindow.length
+      ? inWindow.filter((s) => Math.abs(s.v[c]) >= 1).length / inWindow.length
+      : 1;
+    quality.push(Number(Math.max(0, completeness * (1 - clipFrac)).toFixed(3)));
+  }
+
+  /* R-5.3 — seq counts stride boundaries since the session began, not frames
+   * this page happened to emit. A background tab has its timers throttled to
+   * roughly 1 Hz, and an incrementing counter would hand the consumer an
+   * unbroken seq across a one-second hole — a silently closed gap, which is the
+   * one thing the clause forbids. Derived this way the missing windows show up
+   * as missing numbers. */
+  const nominalSeq = Math.max(0, Math.round((tEnd - state.sessionStart) / STRIDE_MS) - 1);
+  const seq = nominalSeq > state.lastSeq ? nominalSeq : state.lastSeq + 1;
+  state.lastSeq = seq;
+
+  const frame = {
+    tier: "t1",
+    t_mono_ns: Math.round(tEnd * 1e6),
+    t_wall_ms: Math.round(Date.now()),
+    session_id: state.sessionId,
+    seq,
+    feature_space: FEATURE_SPACE,
+    values,
+    quality,
+  };
+  state.frames.push(frame);
+  if (state.frames.length > MAX_FRAMES) state.frames.shift();
+  if (streamActive()) pushToBridge(frame);
+
+  if (state.samples.length > 1) {
+    const span = state.samples[state.samples.length - 1].t - state.samples[0].t;
+    if (span > 0) state.measuredRate = ((state.samples.length - 1) / span) * 1000;
+  }
+  renderSource(frame);
+}
+
+function renderSource(frame) {
+  $("st-session").textContent = state.sessionId || "—";
+  $("st-don").textContent = state.donCount;
+  $("st-frames").textContent = state.frames.length;
+  $("st-rate").textContent = state.measuredRate
+    ? `${state.measuredRate.toFixed(1)} Hz (declared ${NOMINAL_RATE[state.sourceKind]})`
+    : "—";
+  $("st-fps").textContent = state.running ? `${(1000 / STRIDE_MS).toFixed(0)} Hz` : "—";
+  if (frame) {
+    $("st-quality").textContent = frame.quality.map((q) => q.toFixed(2)).join(" ");
+    $("st-values").textContent = frame.values.map((v) => v.toFixed(4)).join(" ");
+  }
+}
+
+/* ====================================================================== session
+ * R-6.1: a new session id at every don. Start is this app's don event, and the
+ * id is never continued across a stop.
+ */
+async function startSession() {
+  if (state.running) return;
+  state.sourceKind = $("sel-source").value;
+
+  if (state.sourceKind === "imu") {
+    const needsPrompt = typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function";
+    if (needsPrompt) {
+      try {
+        const res = await DeviceMotionEvent.requestPermission();
+        if (res !== "granted") { $("source-note").textContent = "Motion access refused by the OS."; return; }
+      } catch {
+        $("source-note").textContent = "Motion access could not be requested. Use the simulated source.";
+        return;
+      }
+    }
+    if (typeof DeviceMotionEvent === "undefined") {
+      $("source-note").textContent =
+        "No motion sensor on this browser. Switch the source to Simulated — it is labelled as such in the capability descriptor and can never be mistaken for a capture.";
+      return;
+    }
+    window.addEventListener("devicemotion", onMotion);
+  } else {
+    state.simTimer = setInterval(simTick, 1000 / NOMINAL_RATE.sim);
+  }
+
+  state.running = true;
+  state.sessionId = "s-" + crypto.randomUUID().slice(0, 8);
+  state.sessionStart = performance.now();
+  state.lastSeq = -1;
+  state.frames = [];
+  state.samples = [];
+  state.received = 0;
+  state.clipped = new Array(CHANNELS).fill(0);
+  state.donCount += 1;
+  localStorage.setItem("gate.don", String(state.donCount));
+
+  windowTimer = setInterval(emitFrame, STRIDE_MS);
+  $("btn-start").disabled = true;
+  $("btn-stop").disabled = false;
+  $("sel-source").disabled = true;
+  logEvent("session", { id: state.sessionId, source: state.sourceKind, don: state.donCount });
+  renderSource(null);
+}
+
+function stopSession() {
+  if (!state.running) return;
+  state.running = false;
+  window.removeEventListener("devicemotion", onMotion);
+  clearInterval(windowTimer);
+  clearInterval(state.simTimer);
+  $("btn-start").disabled = false;
+  $("btn-stop").disabled = true;
+  $("sel-source").disabled = false;
+  logEvent("stop", { id: state.sessionId, frames: state.frames.length });
+  renderSource(null);
+}
+
+/* ======================================================================= crypto
+ * A locally generated, non-extractable P-256 key. It signs the bundle so a
+ * recipient can tell two captures came from the same source and that neither was
+ * edited in transit. It is not an identity and does not try to be one — R-10.5
+ * is explicit that Core does not address forgery, and overclaiming here would be
+ * worse than the gap.
+ */
+const KEYSTORE = "gate-keys";
+let keyPair = null;
+
+function idb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(KEYSTORE, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("keys");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbOp(mode, fn) {
+  return idb().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction("keys", mode);
+    const req = fn(tx.objectStore("keys"));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+async function loadOrCreateKey() {
+  try {
+    const stored = await idbOp("readonly", (s) => s.get("signing"));
+    if (stored) return stored;
+  } catch { /* fall through to generation */ }
+  const pair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,                        // private key never leaves this device
+    ["sign", "verify"]
+  );
+  try { await idbOp("readwrite", (s) => s.put(pair, "signing")); } catch { /* memory-only is acceptable */ }
+  return pair;
+}
+
+async function signBundle(bundle) {
+  if (!keyPair) keyPair = await loadOrCreateKey();
+  const bytes = new TextEncoder().encode(JSON.stringify(bundle));
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, keyPair.privateKey, bytes);
+  const jwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  return {
+    alg: "ECDSA-P256-SHA256",
+    public_key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
+    signature: b64(sig),
+  };
+}
+
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+/* ======================================================================= export */
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function currentGrant() {
+  const g = grants.find((x) => x.id === $("sel-grant").value);
+  if (!g) { refuse("export", "no grant selected"); return null; }
+  if (!grantLive(g)) { refuse("export", `grant ${g.id} is ${grantStatus(g)}`); renderGrants(); return null; }
+  return g;
+}
+
+function exportCapability() {
+  const g = currentGrant();
+  if (!g) return;
+  download("capability.json", JSON.stringify(buildCapability(state), null, 2), "application/json");
+  release(g, "capability", 0);
+}
+
+function exportFrames() {
+  const g = currentGrant();
+  if (!g) return;
+  if (state.frames.length === 0) { refuse("frames", "no frames captured"); return; }
+  const out = applyGrant(state.frames, g);
+  if (out.length === 0) { refuse("frames", `grant ${g.id} has no frame allowance left`); return; }
+  download("frames.jsonl", out.map((f) => JSON.stringify(f)).join("\n") + "\n", "application/x-ndjson");
+  release(g, "frames", out.length);
+}
+
+function exportSelftest() {
+  const g = currentGrant();
+  if (!g) return;
+  const vec = state.lastSelftest ?? runSelftest(NOMINAL_RATE[state.sourceKind]);
+  download("selftest.json", JSON.stringify(vec), "application/json");
+  release(g, "selftest", 0);
+}
+
+async function exportBundle() {
+  const g = currentGrant();
+  if (!g) return;
+  const frames = applyGrant(state.frames, g);
+  const body = {
+    ase_version: "0.1",
+    released_at: new Date().toISOString(),
+    grant: { id: g.id, peer: g.peer, purpose: g.purpose, expires_at: g.expires_at },
+    capability: buildCapability(state),
+    selftest_output: state.lastSelftest ?? runSelftest(NOMINAL_RATE[state.sourceKind]),
+    frames,
+  };
+  body.provenance = await signBundle(body);
+  download(`ase-bundle-${g.id}.json`, JSON.stringify(body, null, 2), "application/json");
+  release(g, "bundle", frames.length);
+}
+
+/* ================================================================ live stream
+ * The §10.3 transport. A browser cannot listen, so bridge.mjs holds the socket
+ * and this page connects to it as the source. Streaming is egress and is treated
+ * as such: same grant, same redaction, same allowance, and it cuts itself off
+ * the moment the grant stops being live — revocation has to bite mid-stream or
+ * it is decoration.
+ */
+const bridge = { sock: null, grantId: null, sent: 0 };
+
+const streamActive = () => bridge.sock && bridge.sock.readyState === 1;
+
+function setStreamState(text) { $("stream-state").textContent = text; }
+
+function toggleStream() {
+  if (bridge.sock) { stopStream("stopped by user"); return; }
+  const g = currentGrant();
+  if (!g) return;
+  const url = $("bridge-url").value.trim();
+  let sock;
+  try { sock = new WebSocket(url); } catch { refuse("stream", "bridge URL is not a WebSocket address"); return; }
+
+  bridge.sock = sock;
+  bridge.grantId = g.id;
+  bridge.sent = 0;
+  setStreamState("connecting…");
+  $("btn-stream").textContent = "Stop streaming";
+
+  sock.onopen = () => {
+    // Declared only once the socket is really open, so the descriptor never
+    // promises a transport that is not there.
+    state.bridgeUri = url.replace(/\/device\/?$/, "");
+    sock.send(JSON.stringify({ type: "capability", capability: buildCapability(state) }));
+    logEvent("stream", { id: g.id, peer: g.peer, uri: state.bridgeUri });
+    setStreamState(`streaming to ${g.peer}`);
+  };
+  sock.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === "control") handleControl(msg);
+  };
+  sock.onerror = () => stopStream("bridge unreachable");
+  sock.onclose = () => stopStream("bridge closed the connection");
+}
+
+function stopStream(reason) {
+  const sock = bridge.sock;
+  if (!sock) return;
+  bridge.sock = null;
+  state.bridgeUri = null;
+  sock.onclose = null;
+  sock.onerror = null;
+  try { sock.close(); } catch { /* already gone */ }
+  saveGrants();
+  logEvent("stream_end", { id: bridge.grantId, frames: bridge.sent, why: reason });
+  setStreamState(`stopped — ${reason} (${bridge.sent} frames sent)`);
+  $("btn-stream").textContent = "Start streaming";
+  renderGrants();
+}
+
+function pushToBridge(frame) {
+  const g = grants.find((x) => x.id === bridge.grantId);
+  if (!g) return stopStream("grant no longer exists");
+  if (!grantLive(g)) return stopStream(`grant ${grantStatus(g)}`);
+  const [redacted] = applyGrant([frame], g);
+  if (!redacted) return stopStream("frame allowance spent");
+  bridge.sock.send(JSON.stringify({ type: "frame", frame: redacted }));
+  bridge.sent += 1;
+  g.released += 1;
+  if (bridge.sent % 10 === 0) { saveGrants(); renderGrants(); }
+  setStreamState(`streaming to ${g.peer} — ${bridge.sent} sent, ${g.max_frames - g.released} left`);
+}
+
+/* §10.4 control plane. Answered by the source, relayed by the bridge. */
+function handleControl(msg) {
+  const c = msg.cmd ?? {};
+  let reply;
+  switch (c.cmd) {
+    case "status":
+      reply = {
+        don_count: state.donCount,
+        session_id: state.sessionId,
+        session_ord: state.donCount,
+        tier: "t1",
+        encoding: "json",
+      };
+      break;
+    case "selftest":
+      reply = runSelftest(NOMINAL_RATE[state.sourceKind]);
+      state.lastSelftest = reply;
+      break;
+    case "time_echo":
+      reply = { token: c.token, t_mono_ns: Math.round(performance.now() * 1e6) };
+      break;
+    case "set_tier":
+      reply = c.tier === "t1" ? { ok: true, tier: "t1" } : { ok: false, reason: "this source exports T1 only" };
+      break;
+    case "set_encoding":
+      reply = c.venc === "f32" ? { ok: true, venc: "f32" } : { ok: false, reason: "this source encodes f32 over JSON only" };
+      break;
+    case "set_adaptive":
+      reply = c.on === false
+        ? { ok: true, adaptive: false }
+        : { ok: false, reason: "this transform has no adaptive mode to enter" };
+      break;
+    default:
+      reply = { error: `unknown command ${c.cmd}` };
+  }
+  bridge.sock.send(JSON.stringify({ type: "control_reply", id: msg.id, reply }));
+  logEvent("control", { cmd: c.cmd ?? "?" });
+}
+
+/* ================================================================ verification
+ * A subset of check.mjs, deliberately including the clauses this build fails.
+ */
+function verify() {
+  const cap = buildCapability(state);
+  const frames = state.frames;
+  const rows = [];
+  const add = (ok, id, msg) => rows.push({ ok, id, msg });
+
+  add(cap.tiers.includes("t1"), "R-3.1", "T1 declared");
+  add(
+    Boolean(cap.signal.kind && cap.signal.channels > 0 && cap.signal.sample_rate_hz > 0),
+    "R-4.1",
+    `signal ${cap.signal.kind}, ${cap.signal.channels}ch @ ${cap.signal.sample_rate_hz}Hz`
+  );
+  add(null, "R-4.2", "montage system is ase.opaque.v1: comparable within this model, not across");
+  add(
+    Boolean(cap.signal.montage.geometry_id),
+    "R-4.2.1",
+    `opaque montage carries geometry_id "${cap.signal.montage.geometry_id}"`
+  );
+  add(
+    typeof cap.clock.rtc === "boolean" && ["boot", "session"].includes(cap.clock.mono_epoch),
+    "R-4.3",
+    `clock declared: rtc=${cap.clock.rtc}, mono epoch ${cap.clock.mono_epoch}`
+  );
+  if (cap.clock.drift_ppm_max === undefined) {
+    add(null, "R-4.3", "clock.drift_ppm_max not declared; hosts must assume the worst");
+  }
+
+  const rate = 1000 / cap.t1.stride_ms;
+  const jsonBytes = 110 + cap.t1.dim * 8;
+  const need = (jsonBytes * rate * 8) / 1000;
+  const fits = cap.transport.find((t) => need <= t.max_sustained_kbps);
+  add(Boolean(fits), "R-7.2", fits
+    ? `live rate ${rate.toFixed(0)} Hz × dim ${cap.t1.dim} fits ${fits.uri} (${need.toFixed(0)} kbps)`
+    : `no declared transport sustains ${need.toFixed(0)} kbps`);
+
+  const local = cap.transport.some((t) => /^(usb|ble|serial|loopback)/i.test(t.uri) || /(localhost|127\.0\.0\.1)/.test(t.uri));
+  add(local, "R-7.1", local
+    ? "at least one local transport"
+    : "no local transport: a browser cannot bind a loopback listener — run bridge.mjs, or use the native build");
+  add(cap.requires_network === false, "R-7.1", "no network required for export");
+  add(cap.developer_gate === false, "R-7.3", "access is user-grantable");
+  add(cap.terms.cross_user_processing_permitted === true, "R-7.4", "terms permit joint processing across consenting users");
+
+  if (frames.length === 0) {
+    add(false, "R-5.1", "no frames captured yet");
+  } else {
+    let monoOk = true, seqOk = true, dimOk = true, qOk = true, spaceOk = true, wallOk = true;
+    let last = -Infinity, lastSeq = -Infinity, gaps = 0;
+    for (const f of frames) {
+      if (!Number.isInteger(f.t_mono_ns) || f.t_mono_ns < last) monoOk = false;
+      if (f.t_mono_ns > Number.MAX_SAFE_INTEGER) monoOk = false;
+      last = f.t_mono_ns;
+      if (f.seq <= lastSeq) seqOk = false;
+      if (f.seq > lastSeq + 1) gaps++;
+      lastSeq = f.seq;
+      if (!Array.isArray(f.values) || f.values.length !== cap.t1.dim) dimOk = false;
+      if (!f.values.every(Number.isFinite)) dimOk = false;
+      if (!Array.isArray(f.quality) || f.quality.length !== cap.signal.channels) qOk = false;
+      else if (!f.quality.every((q) => q >= 0 && q <= 1)) qOk = false;
+      if (f.feature_space !== cap.t1.feature_space) spaceOk = false;
+      if (cap.clock.rtc === true && f.t_wall_ms === undefined) wallOk = false;
+    }
+    add(monoOk, "R-5.2", "t_mono_ns present, integral, non-decreasing");
+    add(dimOk, "R-5.1", `all values[] match declared dim ${cap.t1.dim}`);
+    add(wallOk, "R-5.1", "clock.rtc true and every frame carries t_wall_ms");
+    add(qOk, "R-5.6", `quality is ${cap.signal.channels} per-channel values in 0..1`);
+    add(seqOk, "R-5.3", `seq strictly increasing per session (${gaps} visible gap(s))`);
+    add(spaceOk, "R-5.4", `single pinned feature_space "${cap.t1.feature_space}"`);
+    add(Boolean(state.sessionId), "R-6.1", "session_id present");
+  }
+
+  const st = state.lastSelftest;
+  if (!st) {
+    add(null, "R-5.7", "self-test not run in this session");
+  } else {
+    const worst = Math.max(...st.map((v, i) => Math.abs(v - cap.selftest.expected[i])));
+    add(worst <= cap.selftest.tolerance, "R-5.7",
+      `self-test output matches descriptor (worst |Δ| ${worst.toExponential(2)})`);
+  }
+
+  const tbody = $("verify-rows");
+  tbody.innerHTML = "";
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const mark = r.ok === true ? "PASS" : r.ok === false ? "FAIL" : "WARN";
+    const cls = r.ok === true ? "ok" : r.ok === false ? "bad" : "warn";
+    tr.innerHTML = `<td class="${cls}">${mark}</td><td class="mono">${r.id}</td><td>${esc(r.msg)}</td>`;
+    tbody.appendChild(tr);
+  }
+  const failures = rows.filter((r) => r.ok === false).length;
+  const el = $("verify-verdict");
+  el.textContent = failures === 0
+    ? `CONFORMANT — ${rows.filter((r) => r.ok === true).length} pass, ${rows.filter((r) => r.ok === null).length} warn`
+    : `NOT CONFORMANT — ${failures} fail`;
+  el.className = "verdict " + (failures === 0 ? "ok" : "bad");
+}
+
+const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+/* ========================================================================= wire */
+$("btn-start").addEventListener("click", startSession);
+$("btn-stop").addEventListener("click", stopSession);
+$("btn-grant").addEventListener("click", createGrant);
+$("sel-grant").addEventListener("change", syncExportButtons);
+$("btn-x-cap").addEventListener("click", exportCapability);
+$("btn-x-frames").addEventListener("click", exportFrames);
+$("btn-x-selftest").addEventListener("click", exportSelftest);
+$("btn-x-bundle").addEventListener("click", exportBundle);
+$("btn-stream").addEventListener("click", toggleStream);
+$("btn-verify").addEventListener("click", verify);
+$("btn-ledger-export").addEventListener("click", () =>
+  download("gate-ledger.json", JSON.stringify(ledger, null, 2), "application/json"));
+$("btn-ledger-clear").addEventListener("click", () => {
+  ledger.length = 0;
+  localStorage.setItem("gate.ledger", "[]");
+  renderLedger();
+});
+
+$("btn-selftest").addEventListener("click", () => {
+  const fs = NOMINAL_RATE[$("sel-source").value];
+  const actual = runSelftest(fs);
+  state.lastSelftest = actual;
+  const expected = buildCapability(state).selftest.expected;
+  const worst = Math.max(...actual.map((v, i) => Math.abs(v - expected[i])));
+  const el = $("st-selftest-verdict");
+  const ok = worst <= 1e-6;
+  el.textContent = ok ? `matches (worst |Δ| ${worst.toExponential(2)})` : `MISMATCH ${worst.toExponential(2)}`;
+  el.className = "verdict " + (ok ? "ok" : "bad");
+  $("st-selftest-vec").textContent = actual.map((v) => v.toFixed(6)).join("  ");
+  logEvent("selftest", { fs, ok });
+});
+
+renderGrants();
+renderLedger();
+renderSource(null);
+</script>
+</body>
+</html>
