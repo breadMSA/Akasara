@@ -8,3 +8,6 @@ research/
 
 # private partner-facing atlas (embeds research numbers + Evosub internals)
 hub-explorer/
+
+# replay captures — derived from third-party datasets, and large
+apps/replay/out/

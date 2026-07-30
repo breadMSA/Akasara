@@ -1,0 +1,276 @@
+"""Recorded datasets, presented as ASE-0.1 signal sources.
+
+A source answers exactly what a descriptor needs: what the signal is, how it was
+worn, and where the session boundaries are. It does not know about frames,
+tiers, windows or transports — that is `replay.py`'s job, and keeping the seam
+there is what lets a second modality be added without touching the producer.
+
+Nothing here rewrites the recording. Samples are scaled to normalised full
+scale (ASE-0.1 §5.7: +-1.0 is the acquisition system's own full-scale range)
+and otherwise passed through, because a producer that filters or re-references
+on the way out is exporting its own opinion rather than the device's T1.
+"""
+
+import csv
+import glob
+import os
+
+import numpy as np
+import scipy.io as sio
+
+
+class Session:
+    """One contiguous recording: (T, C) normalised samples plus per-sample cue
+    labels where the protocol has them (0 = rest / no cue)."""
+
+    def __init__(self, session_id, samples, labels=None, label_names=None):
+        self.session_id = session_id
+        self.samples = samples
+        self.labels = labels
+        self.label_names = label_names or {}
+
+
+class Db5Source:
+    """Ninapro DB5 — 10 intact subjects, two Myo armbands, 16 sEMG channels.
+
+    Montage, from the DB5 acquisition protocol: the first armband sits closest
+    to the elbow with its first electrode on the radio-humeral joint; the second
+    sits immediately distal, rotated 22.5 degrees. Eight equidistant electrodes
+    per band, so 45 degrees apart within a band. Every subject's forearm
+    circumference is recorded, which is what makes the electrode SPACING
+    comparable across people and not merely the electrode count -- the
+    distinction the spec's R-4.2.2 rests on.
+
+    The one number here that is not measured is the axial separation of the two
+    bands: DB5 records that band 2 is "just below" band 1 and nothing more. The
+    nominal width of a Myo armband is used, and the descriptor says so, because
+    R-4.2.3 exists precisely so a consumer can see that a placement claim is
+    nominal rather than measured.
+    """
+
+    kind = "semg"
+    sample_rate_hz = 200.0
+    channels = 16
+    full_scale = 128.0                 # Myo streams signed 8-bit
+    mains_hz = 50.0                    # recorded in Italy
+    MYO_WIDTH_MM = 40                  # nominal; see class docstring
+
+    EX_COUNTS = {1: 12, 2: 17, 3: 23}
+    EX_OFFSET = {1: 0, 2: 12, 3: 29}
+
+    def __init__(self, root, subject):
+        self.root = root
+        self.subject = subject
+        self.subdir = os.path.join(root, subject)
+        if not os.path.isdir(self.subdir):
+            raise FileNotFoundError(self.subdir)
+        self._meta = None
+
+    # ------------------------------------------------------------------ meta
+    def _load(self, exercise):
+        sn = os.path.basename(self.subdir).lstrip("s")
+        path = os.path.join(self.subdir, f"S{sn}_E{exercise}_A1.mat")
+        return sio.loadmat(path) if os.path.exists(path) else None
+
+    @property
+    def meta(self):
+        if self._meta is None:
+            for e in (1, 2, 3):
+                m = self._load(e)
+                if m is not None:
+                    self._meta = {
+                        "circumference_mm": float(np.asarray(m["circumference"]).ravel()[0]) * 10.0,
+                        "laterality": str(np.asarray(m["laterality"]).ravel()[0]),
+                        "sensor": str(np.asarray(m["sensor"]).ravel()[0]),
+                        "sample_rate_hz": float(np.asarray(m["frequency"]).ravel()[0]),
+                    }
+                    break
+            if self._meta is None:
+                raise FileNotFoundError(f"no exercise files under {self.subdir}")
+        return self._meta
+
+    def montage(self):
+        circ = self.meta["circumference_mm"]
+        spacing = circ / 8.0
+        side = {"r": "right", "l": "left"}.get(self.meta["laterality"], "n/a")
+        positions = []
+        for band in (0, 1):
+            for i in range(8):
+                positions.append({
+                    "ch": band * 8 + i,
+                    "angle_deg": round(i * 45.0 + band * 22.5, 1),
+                    "axial_mm": band * self.MYO_WIDTH_MM,
+                })
+        return {
+            "system": "ase.limb.v1",
+            "site": "forearm-proximal",
+            "side": side,
+            "arrangement": "circumferential",
+            "reference": "differential-adjacent",
+            "positions": positions,
+            "akasara.spacing_mm": round(spacing, 1),
+            "akasara.circumference_mm": round(circ, 1),
+            "akasara.axial_mm_basis": "nominal armband width; DB5 records only "
+                                      "that band 2 is immediately distal to band 1",
+        }
+
+    def sessions(self):
+        """One session per exercise file. Exercises were recorded as separate
+        acquisitions, so treating them as separate sessions is what the data
+        actually is -- not a convenience."""
+        names = dict(enumerate(GESTURE_NAMES, start=1))
+        out = []
+        for e in (1, 2, 3):
+            m = self._load(e)
+            if m is None:
+                continue
+            emg = np.asarray(m["emg"], dtype=np.float64) / self.full_scale
+            rs = np.asarray(m["restimulus"]).ravel().astype(int)
+            gid = np.where(rs > 0, rs + self.EX_OFFSET[e], 0)
+            out.append(Session(f"{self.subject}-e{e}", emg, gid, names))
+        return out
+
+
+class PdEegSource:
+    """ds007822 -- three-player prisoner's-dilemma EEG, 19 channels at 300 Hz.
+
+    Here to make "signal-agnostic" mean something. It differs from DB5 in every
+    axis the spec has a word for: a different montage SYSTEM (10-20 labels, not
+    limb geometry), a different Appendix A quality band, a different sample
+    rate, and a different T1 transform (log band power, not time-domain
+    features) -- so R-5.4's pinning is exercised on arithmetic the consumer has
+    never seen rather than on the same formula with more channels.
+
+    The cue is the ROUND NUMBER. Three players sat through the same forty
+    rounds, so the round index is a shared timeline that exists for both people
+    and belongs to neither -- the EEG analogue of DB5's shared movement.
+
+    FULL SCALE, and why it is a constant. The BIDS sidecar declares microvolts;
+    the recorded values run to ~1e9, six orders of magnitude above anything
+    physiological. The published unit is therefore not usable and no physical
+    claim is made here. What ASE needs is a full-scale reference, so one fixed
+    constant in dataset-native units is declared and applied to every subject
+    identically. Deriving the scale per recording instead would have been more
+    flattering and would have made the T1 transform per-user ADAPTIVE, which
+    R-5.5 requires a device to declare and offer a way out of. A constant is the
+    only version of this that is not quietly adaptive.
+    """
+
+    kind = "eeg"
+    channels = 19
+    sample_rate_hz = 300.0
+    full_scale = 1.0e9                 # dataset-native units; see class docstring
+    mains_hz = 50.0
+    EPOCH_USABLE_S = 4.0               # epochs are 5 s at 4 s spacing; the last
+                                       # second overlaps the next round
+
+    def __init__(self, root, subject, task="pddecision"):
+        self.root = root
+        self.subject = subject
+        self.task = task
+        self.base = os.path.join(root, subject, "eeg", f"{subject}_task-{task}")
+        if not os.path.exists(self.base + "_eeg.set"):
+            raise FileNotFoundError(self.base + "_eeg.set")
+        self._set = None
+
+    def _load(self):
+        if self._set is None:
+            self._set = sio.loadmat(self.base + "_eeg.set",
+                                    squeeze_me=True, struct_as_record=False)
+        return self._set
+
+    def _labels(self):
+        return [str(c.labels) for c in self._load()["chanlocs"]]
+
+    def montage(self):
+        """ase.eeg.1020.v1 wants a `label` per channel and nothing else -- the
+        coordinate system IS the label set, which is exactly why a standard
+        montage is comparable across devices in a way a wristband is not."""
+        labels = self._labels()
+        status = {}
+        chpath = self.base + "_channels.tsv"
+        if os.path.exists(chpath):
+            with open(chpath, newline="", encoding="utf-8") as fh:
+                for row in csv.DictReader(fh, delimiter="\t"):
+                    status[row["name"]] = row.get("status", "n/a")
+        m = {
+            "system": "ase.eeg.1020.v1",
+            "site": "scalp",
+            "side": "bilateral",
+            "arrangement": "scattered",
+            "reference": str(self._load().get("ref", "unknown")),
+            "positions": [{"ch": i, "label": lab} for i, lab in enumerate(labels)],
+        }
+        bad = [lab for lab in labels if status.get(lab, "good") != "good"]
+        if bad:
+            m["akasara.channels_marked_bad"] = bad
+        return m
+
+    def sessions(self):
+        s = self._load()
+        data = np.asarray(s["data"], dtype=np.float64)      # (chan, samp, trial)
+        srate = float(s["srate"])
+        usable = int(round(self.EPOCH_USABLE_S * srate))
+
+        onsets, names = {}, {}
+        evpath = self.base + "_events.tsv"
+        with open(evpath, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh, delimiter="\t"):
+                t = int(row["trial"])
+                onsets[t] = float(row["onset"])
+                names[t] = f"round {t} ({row.get('triad_outcome', '?')})"
+
+        n_trials = data.shape[2]
+        span = int(round(max(onsets.values()) * srate)) + usable
+        samples = np.zeros((span, self.channels))
+        labels = np.zeros(span, dtype=int)
+        for k in range(n_trials):
+            trial = k + 1
+            if trial not in onsets:
+                continue
+            start = int(round(onsets[trial] * srate))
+            seg = data[:, :usable, k].T / self.full_scale
+            end = min(start + usable, span)
+            samples[start:end] = seg[:end - start]
+            labels[start:end] = trial
+        return [Session(f"{self.subject}-{self.task}", samples, labels, names)]
+
+
+# canonical DB5 movement names in global-id order, used only as human-readable
+# labels on the vendor-extension cue field. Text from the Ninapro exercise
+# descriptions.
+GESTURE_NAMES = [
+    "index finger flexion", "index finger extension",
+    "middle finger flexion", "middle finger extension",
+    "ring finger flexion", "ring finger extension",
+    "little finger flexion", "little finger extension",
+    "thumb adduction", "thumb abduction",
+    "thumb flexion", "thumb extension",
+    "thumb up", "flexion of index and middle, extension of the others",
+    "flexion of ring and little finger, extension of the others",
+    "thumb opposing base of little finger",
+    "abduction of all fingers", "fingers flexed together in a fist",
+    "pointing index", "adduction of extended fingers",
+    "wrist supination (axis middle finger)",
+    "wrist pronation (axis middle finger)",
+    "wrist supination (axis little finger)",
+    "wrist pronation (axis little finger)",
+    "wrist flexion", "wrist extension",
+    "wrist radial deviation", "wrist ulnar deviation",
+    "wrist extension with closed hand",
+    "large diameter grasp", "small diameter grasp (tool)",
+    "fixed hook grasp", "index finger extension grasp",
+    "medium wrap", "ring grasp", "prismatic four fingers grasp",
+    "stick grasp", "writing tripod grasp", "power sphere grasp",
+    "three finger sphere grasp", "precision sphere grasp",
+    "tripod grasp", "prismatic pinch grasp", "tip pinch grasp",
+    "quadpod grasp", "lateral grasp", "parallel extension grasp",
+    "extension type grasp", "power disk grasp",
+    "open a bottle with a tripod grasp", "turn a screw", "cut something",
+]
+
+
+def subjects(root):
+    return [os.path.basename(p) for p in
+            sorted(glob.glob(os.path.join(root, "s*")),
+                   key=lambda p: int(os.path.basename(p).lstrip("s")))]
