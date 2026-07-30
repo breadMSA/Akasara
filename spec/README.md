@@ -93,7 +93,7 @@ are actually asking for. It is non-normative and every claim in it points back
 to a clause here.
 
 `ICS.md` is the Implementation Conformance Statement — one row for every one of
-the 46 requirement identifiers in the specification, with what you are
+the 48 requirement identifiers in the specification, with what you are
 asserting, whether the suite can decide it or only record your declaration, and
 a column to fill in. Of the 43 answerable rows the suite decides 14 outright;
 18 rest wholly or partly on the vendor's signature. That split is deliberate and

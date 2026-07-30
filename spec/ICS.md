@@ -61,6 +61,7 @@ and they are the honest centre of this form.
 | R-5.2.1 | SHOULD | `time_echo` control command implemented so a host can place device time on its own clock | inspection | | |
 | R-5.3 | MUST | Sensor-to-host latency documented; frames never reordered; gaps visible as `seq` gaps, never concealed by renumbering | suite (partial) | | |
 | R-5.4 | MUST | `feature_space` changes on **any** change to the producing transform, including an improvement you shipped in a firmware update | declaration | | |
+| R-5.4.1 | MUST | `t1.layout` is `feature-major`, `channel-major` or `opaque`; if not opaque, `dim` is a multiple of `signal.channels` | suite | | |
 | R-5.5 | MUST | No undeclared per-user adaptation of exported T1; if adaptive, `adapt_state` is carried and a non-adaptive mode exists | declaration | | |
 | R-5.6 | MUST | `quality` is a measured 0..1 aggregate or exactly `signal.channels` values — never classifier confidence; per-kind definitions in Appendix A are normative | suite (shape) / declaration (provenance) | | |
 | R-5.7 | MUST | A self-test runs the **exact production transform** over `ase.selftest.v1` and the descriptor publishes `expected` + `tolerance` | suite | | |
@@ -109,6 +110,7 @@ about §7.*
 | R-9.1 | MUST NOT | float16/int16 not used where quantisation exceeds your declared `tolerance`; `t1` declares which encodings are lossless for your feature space | declaration | | |
 | R-9.2 | MUST | Unknown `type` values and trailer bits are skippable; a receiver never desynchronises | inspection | | |
 | R-9.3 | MUST | `.ase` readers verify per-record CRC-32 (ISO-HDLC) and reject failures; verify the trailer digest on full read; report a missing trailer as truncated | inspection | | writer-side only if you do not ship a reader |
+| R-9.4 | MUST | fixed-point `quality_q` and per-channel quality are produced by `floor(v x max + 0.5)` — half away from zero, not the half-to-even some languages default to | inspection | | byte-level; two conformant codecs disagreed here before the clause existed |
 
 ## §10 — Transport bindings
 
@@ -140,7 +142,7 @@ about §7.*
 
 ## Summary
 
-All 46 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
+All 48 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
 one row for Appendix A.
 
 | | Count |

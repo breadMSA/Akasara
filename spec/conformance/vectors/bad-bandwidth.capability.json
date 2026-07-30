@@ -105,6 +105,7 @@
   "t1": {
     "feature_space": "example.band3.deep.v1",
     "dim": 128,
+    "layout": "feature-major",
     "window_ms": 200,
     "stride_ms": 20,
     "producer": "model",

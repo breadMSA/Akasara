@@ -1,0 +1,2 @@
+{"tier": "t1", "t_mono_ns": 400000000, "session_id": "don-1", "seq": 0, "feature_space": "example.two.tdfeat.v1", "values": [0.11, 0.12, 0.03, 0.04], "quality": [0.9, 0.88]}
+{"tier": "t1", "t_mono_ns": 300000000, "session_id": "don-1", "seq": 1, "feature_space": "example.two.tdfeat.v1", "values": [0.13, 0.1, 0.05, 0.02], "quality": [0.9, 0.88]}

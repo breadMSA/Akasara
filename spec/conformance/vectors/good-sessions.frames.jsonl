@@ -1,0 +1,5 @@
+{"tier": "t1", "t_mono_ns": 200000000, "session_id": "don-1", "seq": 0, "feature_space": "example.two.tdfeat.v1", "values": [0.11, 0.12, 0.03, 0.04], "quality": [0.9, 0.88]}
+{"tier": "t1", "t_mono_ns": 300000000, "session_id": "don-1", "seq": 1, "feature_space": "example.two.tdfeat.v1", "values": [0.13, 0.1, 0.05, 0.02], "quality": [0.9, 0.88]}
+{"tier": "t1", "t_mono_ns": 400000000, "session_id": "don-1", "seq": 2, "feature_space": "example.two.tdfeat.v1", "values": [0.09, 0.14, 0.04, 0.03], "quality": [0.9, 0.88]}
+{"tier": "t1", "t_mono_ns": 200000000, "session_id": "don-2", "seq": 0, "feature_space": "example.two.tdfeat.v1", "values": [0.21, 0.22, 0.06, 0.07], "quality": [0.9, 0.88]}
+{"tier": "t1", "t_mono_ns": 300000000, "session_id": "don-2", "seq": 1, "feature_space": "example.two.tdfeat.v1", "values": [0.23, 0.2, 0.08, 0.05], "quality": [0.9, 0.88]}

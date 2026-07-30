@@ -351,6 +351,28 @@ MUST change the identifier.**
 > re-trained device-side model does not degrade downstream systems visibly; it
 > makes them wrong.
 
+**R-5.4.1 (vector layout).** `t1.layout` MUST be present and MUST be one of:
+
+| value | meaning |
+| --- | --- |
+| `feature-major` | `values[f * channels + c]` — every channel of feature 0, then every channel of feature 1, … |
+| `channel-major` | `values[c * n_features + f]` — every feature of channel 0, then every feature of channel 1, … |
+| `opaque` | the vector does not factor into channels × features; a consumer MUST NOT attempt a per-channel reduction of it |
+
+Where the layout is not `opaque`, `t1.dim` MUST be an exact multiple of
+`signal.channels`.
+
+> Non-normative: the identifier pins *which* transform ran. It does not pin the
+> order of the answer, and two conformant devices can produce byte-identical
+> descriptors while disagreeing about it. That is not a theoretical gap — the two
+> reference implementations disagreed, one feature-major and one channel-major,
+> both correct in isolation. A consumer that reduces one as if it were the other
+> averages amplitude together with waveform length and is wrong without ever
+> failing anything, which is exactly the failure mode §11.5 asks a vendor to rule
+> out. `opaque` is a real answer, not an escape hatch; it costs the device the
+> ability to state an R-11.5 margin, which is the correct price for a vector
+> whose axes mean nothing to anyone outside.
+
 **R-5.5** The device MUST NOT apply per-user adaptation to exported T1 values
 without declaring it. If adaptive normalisation is applied, the frame MUST carry
 `adapt_state` identifying the current adaptation, and the device MUST offer a
@@ -589,6 +611,19 @@ present): per-channel quality as `channels` bytes (0..255 mapped to 0..1);
 `adapt_state` as a `uint16` id resolved via the descriptor; anchor as
 `{ uint32 schedule_ord, uint32 item_ord, uint64 t_stim_mono_ns, float32
 timing_err_ms }`; `t_wall_ms` as a `uint64`.
+
+**R-9.4 (fixed-point rounding).** The two fixed-point quality fields —
+`quality_q` in the header and the per-channel quality trailer — are produced by
+multiplying the 0..1 value by the field's maximum (65535 and 255 respectively)
+and rounding **half away from zero**: `floor(v × max + 0.5)` for the
+non-negative values this field can hold. This is stated because it is not
+inferable: a language whose default rounding is half-to-even and one whose
+default is half-away-from-zero produce bytes that differ by one LSB whenever the
+product lands exactly on a half, so two otherwise-conformant implementations of
+this section will not agree byte-for-byte on the same frame. The difference is
+below the field's own resolution and can never change a decision, but byte
+equality is a thing implementers compare, and a specification that leaves it
+undefined has invented a bug for them to find.
 
 **R-9.1** A device MUST NOT use `venc = 0x01` (float16) or `0x02` (int16) when
 the resulting quantisation exceeds its declared self-test `tolerance`, and MUST

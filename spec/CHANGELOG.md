@@ -176,3 +176,78 @@ Sixth same-day revision — **§11.5 becomes normative, at SHOULD**:
   Eleven days is not twenty, so it would make the parameter partially bounded
   rather than measured. Recorded in §11.5 as the next thing to run; the spec text
   continues to say the number is asserted.
+
+Fourth revision, 2026-07-29 — the first defect found by an implementation that
+did not write the spec:
+
+- **`check.mjs` R-5.2 was capture-wide, not per session.** R-4.3 permits the
+  monotonic epoch to be **session start**, so a capture holding several sessions
+  legitimately restarts `t_mono_ns` at each one. The suite compared every frame
+  against the previous frame regardless of session, and therefore failed a
+  conformant multi-session export. Monotonicity is now checked within each
+  `session_id`; a clock going backwards inside one session still fails, and both
+  directions are locked by new vectors (`good-sessions.*`,
+  `bad-clock-backwards.frames.jsonl`). No requirement changed — the suite was
+  wrong about the requirement.
+
+  Found by `apps/replay`, a second producer written in a second language against
+  the spec text, whose DB5 captures carry one session per exercise file. This is
+  the specific thing a single-implementation specification cannot find out about
+  itself.
+
+Fifth revision, 2026-07-29 — the second and third things a second implementation
+found, and one negative result:
+
+- **R-9.4 added (fixed-point rounding).** §9.2's two fixed-point quality fields
+  did not say how to round. The reference codec in JavaScript uses
+  `Math.round` (half away from zero); a Python implementation written from the
+  layout table alone uses the language default (half to even). On a quality of
+  exactly 0.7 the product is 178.5 and the two produce **different bytes** —
+  178 against 179 — for the same frame. The difference is below the field's own
+  resolution and cannot change any decision, but byte equality is the first
+  thing two implementers compare, and leaving it undefined manufactured a bug
+  for them to find. Now stated: `floor(v × max + 0.5)`. Both reference codecs
+  are pinned to it by a test that encodes on one side and decodes on the other.
+- **A second modality is exercised end to end.** `apps/replay` now also produces
+  from 19-channel scalp EEG at 300 Hz: the `ase.eeg.1020.v1` montage system
+  rather than limb geometry, log band power rather than time-domain features,
+  and its own pinned feature space. CONFORMANT, no warnings. "Signal-agnostic"
+  was previously a design claim tested on one signal; it has now been produced
+  and consumed on three.
+- **A negative worth recording against §11.5.** Measured on that EEG capture, the
+  cross-user margin within a triad (people who actually played the same rounds)
+  is **+0.010, CI [+0.005, +0.015]** — and between triads, people who never
+  shared a round, it is **+0.010, CI [+0.007, +0.012]**. Identical. On this task
+  and this feature space, the entire margin is generic transferable structure and
+  none of it is evidence about the pair. §11.5 already warns that a margin can be
+  earned this way; this is the extreme case of the warning coming true, and it is
+  why the EEG captures deliberately publish **no** `cross_user_margin` at all.
+  The DB5 sEMG margin is unaffected: +0.162, CI [+0.153, +0.172], collapsing to
+  −0.004 under a permutation control.
+
+Sixth revision, 2026-07-30 — the fourth thing a second implementation found, and
+the EEG negative bounded:
+
+- **R-5.4.1 added (vector layout).** R-5.4 pins *which* transform produced
+  `values[]`. It does not pin the order of the answer. `apps/replay` and
+  `apps/gate` compute the same two time-domain features and lay them out
+  differently — feature-major and channel-major — and both were correct, both
+  conformant, and mutually unusable. A consumer collapsing the wrong axis
+  averages RMS together with waveform length and reports the result as the
+  channel-mean baseline that §11.5 asks a vendor to beat: wrong, silent, and not
+  caught by anything in the suite. `t1.layout` is now required, one of
+  `feature-major`, `channel-major`, `opaque`. `opaque` is a real answer and costs
+  the device the ability to state an R-11.5 margin, since the baseline that
+  margin is measured against does not exist for a vector that does not factor.
+  This is the first defect found not by a second implementation reading the spec,
+  but by two of them being pointed at each other.
+- **The EEG negative is bounded rather than restated.** Both permutation controls
+  are now reported (1.0x chance, margin −0.004 and +0.001), which is what shows
+  the 1.4–1.6x retrieval is a real transfer and not noise, and the sharper
+  question is asked directly: does sharing the rounds raise retrieval at all,
+  before any reduction? **+0.008, CI [−0.001, +0.017], p = 0.099, 12/18 positive.**
+  A near-miss, reported as one. The negative about the *margin* stands. What it
+  is not is a negative about EEG: the cue is the round index, and forty rounds of
+  one game are forty repetitions of one state rather than forty distinct ones, so
+  the task has a ceiling near its floor and could not have shown a pair effect
+  where one existed.

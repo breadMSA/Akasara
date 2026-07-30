@@ -1,8 +1,8 @@
 {
   "ase_version": "0.1",
   "vendor": "example",
-  "model": "band-2",
-  "firmware": "3.5.0",
+  "model": "opaque-margin",
+  "firmware": "3.4.1",
   "tiers": [
     "t0",
     "t1"
@@ -43,19 +43,27 @@
     }
   },
   "t1": {
-    "feature_space": "example.band2.tdfeat.v3",
+    "feature_space": "example.band2.deep.v1",
     "dim": 8,
-    "layout": "feature-major",
+    "layout": "opaque",
     "window_ms": 200,
     "stride_ms": 50,
-    "producer": "dsp",
+    "producer": "model",
     "adaptive": false,
     "documentation": "https://example.com/ase/tdfeat-v3",
     "latency_typ_ms": 12,
     "latency_max_ms": 28,
     "lossless_encodings": [
       "f32"
-    ]
+    ],
+    "cross_user_margin": {
+      "margin": 0.153,
+      "ci_low": 0.121,
+      "ci_high": 0.184,
+      "task": "calibration-free cross-subject retrieval of held-out gestures, 52-way",
+      "subjects": 6,
+      "bootstrap_unit": "subject"
+    }
   },
   "clock": {
     "rtc": false,
@@ -65,14 +73,14 @@
   "selftest": {
     "input": "ase.selftest.v1",
     "expected": [
-      -0.956654,
-      -0.960432,
-      -0.961697,
-      -0.962914,
-      -0.96261,
-      -0.961683,
-      -0.961261,
-      -0.963242
+      -0.962833,
+      -0.962579,
+      -0.961893,
+      -0.964754,
+      -0.963061,
+      -0.962078,
+      -0.962346,
+      -0.963352
     ],
     "tolerance": 0.0001
   },

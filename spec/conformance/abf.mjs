@@ -91,6 +91,9 @@ export function encodeT1(frame, opts = {}) {
   buf.writeUInt8(venc, 2);
   buf.writeUInt8(0, 3);
   buf.writeUInt16LE(dim, 4);
+  // R-9.4: half away from zero. Math.round already is, for the non-negative
+  // values this field holds; named here so it stays deliberate. A half-to-even
+  // language gets a different byte, which is how the clause came to exist.
   buf.writeUInt16LE(Math.round(Math.min(1, Math.max(0, aggregate)) * 65535), 6);
   buf.writeUInt32LE(frame.seq, 8);
   buf.writeUInt32LE(opts.sessionOrd ?? 0, 12);
@@ -111,7 +114,7 @@ export function encodeT1(frame, opts = {}) {
     buf.writeFloatLE(scale, off); off += 4;
   }
 
-  if (perCh) for (const q of frame.quality) buf.writeUInt8(Math.round(q * 255), off++);
+  if (perCh) for (const q of frame.quality) buf.writeUInt8(Math.round(q * 255), off++);  // R-9.4
   if (flags & FLAG_ADAPT) { buf.writeUInt16LE(opts.adaptOrd ?? 0, off); off += 2; }
   if (flags & FLAG_ANCHOR) {
     buf.writeUInt32LE(opts.scheduleOrd ?? 0, off); off += 4;

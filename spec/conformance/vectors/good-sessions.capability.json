@@ -1,0 +1,78 @@
+{
+  "ase_version": "0.1",
+  "vendor": "example",
+  "model": "two-session-rig",
+  "firmware": "1.0.0",
+  "tiers": [
+    "t1"
+  ],
+  "profiles": [],
+  "signal": {
+    "kind": "semg",
+    "channels": 2,
+    "sample_rate_hz": 200,
+    "montage": {
+      "system": "ase.limb.v1",
+      "site": "forearm-proximal",
+      "side": "right",
+      "arrangement": "circumferential",
+      "reference": "differential-adjacent",
+      "positions": [
+        {
+          "ch": 0,
+          "angle_deg": 0,
+          "axial_mm": 0
+        },
+        {
+          "ch": 1,
+          "angle_deg": 180,
+          "axial_mm": 0
+        }
+      ]
+    }
+  },
+  "t1": {
+    "feature_space": "example.two.tdfeat.v1",
+    "dim": 4,
+    "layout": "feature-major",
+    "window_ms": 200,
+    "stride_ms": 100,
+    "producer": "dsp",
+    "adaptive": false,
+    "documentation": "https://example.com/ase/two",
+    "latency_typ_ms": 1,
+    "latency_max_ms": 4
+  },
+  "clock": {
+    "rtc": false,
+    "mono_epoch": "session",
+    "drift_ppm_max": 20
+  },
+  "selftest": {
+    "input": "ase.selftest.v1",
+    "expected": [
+      0.384633642,
+      0.390140193,
+      0.250040406,
+      0.289041158
+    ],
+    "tolerance": 1e-09
+  },
+  "don_count": 2,
+  "transport": [
+    {
+      "uri": "ws://localhost:8765",
+      "encodings": [
+        "json"
+      ],
+      "max_sustained_kbps": 1000
+    }
+  ],
+  "requires_account": false,
+  "requires_network": false,
+  "developer_gate": false,
+  "terms": {
+    "cross_user_processing_permitted": true,
+    "url": "https://example.com/ase/terms"
+  }
+}

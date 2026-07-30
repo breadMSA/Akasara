@@ -264,6 +264,24 @@ function checkCapability(cap) {
     if (t1.latency_max_ms === undefined) fail("R-5.3", "t1.latency_max_ms not documented");
     else pass("R-5.3", `worst-case latency documented (${t1.latency_max_ms} ms)`);
 
+    // R-5.4.1 — the identifier pins which transform ran, not the order of the
+    // answer. A consumer that guesses wrong reduces amplitude together with
+    // waveform length and never fails anything.
+    const LAYOUTS = ["feature-major", "channel-major", "opaque"];
+    if (t1.layout === undefined) {
+      fail("R-5.4.1", `t1.layout missing; a consumer cannot tell whether values[] runs channels-within-features or the other way round (one of ${LAYOUTS.join(", ")})`);
+    } else if (!LAYOUTS.includes(t1.layout)) {
+      fail("R-5.4.1", `t1.layout "${t1.layout}" is not one of ${LAYOUTS.join(", ")}`);
+    } else if (t1.layout !== "opaque" && sig.channels > 0 && t1.dim % sig.channels !== 0) {
+      fail("R-5.4.1", `t1.layout "${t1.layout}" claims values[] factors into channels x features, but dim ${t1.dim} is not a multiple of signal.channels ${sig.channels}`);
+    } else if (t1.layout === "opaque" && t1.cross_user_margin !== undefined) {
+      fail("R-5.4.1", "t1.layout is opaque, so no consumer can compute the channel-mean reduction the stated cross_user_margin is measured against");
+    } else {
+      pass("R-5.4.1", t1.layout === "opaque"
+        ? "values[] declared opaque; no per-channel reduction is offered"
+        : `values[] declared ${t1.layout}, ${t1.dim / sig.channels} features x ${sig.channels} channels`);
+    }
+
     if (t1.adaptive === true && t1.non_adaptive_mode !== true) {
       fail("R-5.5", "exported T1 is per-user adaptive with no non-adaptive mode offered");
     }
@@ -334,7 +352,7 @@ function checkFrames(cap, allFrames, t1) {
   let monoOk = true, seqOk = true, dimOk = true, qualityOk = true, finiteOk = true;
   let adaptMissing = false, wallMissing = false, wallInvented = false, monoRange = true;
   let qualityLenOk = true;
-  let lastMono = -Infinity, gaps = 0;
+  let gaps = 0;
 
   frames.forEach((f, i) => {
     const at = `frame ${i}`;
@@ -348,9 +366,6 @@ function checkFrames(cap, allFrames, t1) {
     if (f.t_mono_ns > Number.MAX_SAFE_INTEGER) monoRange = false;
     spaces.add(f.feature_space);
 
-    if (!Number.isInteger(f.t_mono_ns) || f.t_mono_ns < lastMono) monoOk = false;
-    lastMono = f.t_mono_ns;
-
     if (!Array.isArray(f.values) || (dim && f.values.length !== dim)) dimOk = false;
     if (Array.isArray(f.values) && !f.values.every((v) => Number.isFinite(v))) finiteOk = false;
 
@@ -361,12 +376,19 @@ function checkFrames(cap, allFrames, t1) {
 
     if (t1?.adaptive === true && f.adapt_state === undefined) adaptMissing = true;
 
+    // R-5.2 monotonicity is per SESSION, not per capture. R-4.3 lets the epoch
+    // be session start, so a capture holding several sessions restarts
+    // t_mono_ns at every one of them; a capture-wide comparison would fail a
+    // conformant multi-session export. (Found by the Python producer in
+    // apps/replay, whose DB5 captures carry one session per exercise file.)
     const prev = sessions.get(f.session_id);
+    if (!Number.isInteger(f.t_mono_ns)) monoOk = false;
     if (prev !== undefined) {
-      if (f.seq <= prev) seqOk = false;
-      if (f.seq > prev + 1) gaps++;
+      if (f.t_mono_ns < prev.mono) monoOk = false;
+      if (f.seq <= prev.seq) seqOk = false;
+      if (f.seq > prev.seq + 1) gaps++;
     }
-    sessions.set(f.session_id, f.seq);
+    sessions.set(f.session_id, { seq: f.seq, mono: f.t_mono_ns });
   });
 
   monoOk ? pass("R-5.2", "t_mono_ns present, integral, non-decreasing")
