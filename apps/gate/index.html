@@ -168,6 +168,7 @@
     <dt>Session</dt><dd id="st-session">—</dd>
     <dt>Don count</dt><dd id="st-don">0</dd>
     <dt>Frames held</dt><dd id="st-frames">0</dd>
+    <dt>T0 events</dt><dd id="st-events">0</dd>
     <dt>Measured sample rate</dt><dd id="st-rate">—</dd>
     <dt>Frame rate</dt><dd id="st-fps">—</dd>
     <dt>Latest quality</dt><dd id="st-quality">—</dd>
@@ -397,6 +398,95 @@ function t1Transform(perChannel) {
   return values;
 }
 
+/* ============================================================== T0 recogniser
+ * §3's T0 tier, and the point of R-3.2.2: this recogniser runs on the exported
+ * T1 vectors and nothing else, so every event it emits can name the frame it
+ * decided on and a consumer can re-derive the decision from the capture.
+ *
+ * It is a two-state hysteresis detector over motion energy — the mean of the six
+ * per-channel RMS features, which in this channel-major layout are values[2c].
+ * Two thresholds rather than one because a single one chatters: a hand held
+ * still hovers around any threshold you pick and emits a burst of onsets.
+ *
+ * It deliberately declares NO confidence. A threshold detector does not have a
+ * posterior, and R-3.2.1 says a device without one omits the field rather than
+ * emitting 1.0 — so `t0.confidence` is false here, and by R-9.5 these events go
+ * out as JSON rather than ABF. Manufacturing a plausible-looking number from the
+ * distance to the threshold would have been the easy way to make the tier look
+ * more finished than the recogniser is.
+ */
+const EVENT_SPACE = "akasara.gate.energy-hysteresis.v1";
+const T0 = {
+  MOVEMENT_ONSET: 1,
+  MOVEMENT_OFFSET: 2,
+};
+const T0_EVENTS = [
+  { code: T0.MOVEMENT_ONSET, label: "movement_onset" },
+  { code: T0.MOVEMENT_OFFSET, label: "movement_offset" },
+];
+// In normalised full-scale units (±1). Set from the resting band of a handheld
+// phone: gravity sits on one accel axis but RMS of the normalised signal at rest
+// stays under ~0.02 once the constant component is the only thing moving.
+const T0_ENTER = 0.06;
+const T0_EXIT = 0.03;
+// A movement shorter than one stride is a single noisy window, not a movement.
+const T0_MIN_MS = STRIDE_MS;
+
+function motionEnergy(values) {
+  let sum = 0;
+  for (let c = 0; c < CHANNELS; c++) sum += Math.abs(values[2 * c]);
+  return sum / CHANNELS;
+}
+
+/* Returns the events this frame produced, in order. Pure apart from `rec`, so
+ * the same function drives the live stream and could be replayed over a capture.
+ */
+function recognise(rec, frame) {
+  const energy = motionEnergy(frame.values);
+  const out = [];
+  const mk = (code, extra = {}) => {
+    const ev = {
+      tier: "t0",
+      t_mono_ns: frame.t_mono_ns,
+      t_wall_ms: frame.t_wall_ms,
+      session_id: frame.session_id,
+      seq: rec.seq++,
+      event_space: EVENT_SPACE,
+      code,
+      // R-3.2.2 — the evidence. This is the frame the decision was made on.
+      t1_seq: frame.seq,
+      duration_ms: 0,
+      // Aggregate contact quality of the window decided on, so a consumer can
+      // discount a decision taken on a bad window. Never the confidence.
+      quality: Number((frame.quality.reduce((a, b) => a + b, 0) / frame.quality.length).toFixed(3)),
+      ...extra,
+    };
+    if (frame["akasara.cue"] !== undefined) {
+      ev["akasara.cue"] = frame["akasara.cue"];
+      ev["akasara.cue_name"] = frame["akasara.cue_name"];
+    }
+    out.push(ev);
+    return ev;
+  };
+
+  if (!rec.moving && energy >= T0_ENTER) {
+    rec.moving = true;
+    rec.startNs = frame.t_mono_ns;
+    mk(T0.MOVEMENT_ONSET);
+  } else if (rec.moving && energy <= T0_EXIT) {
+    const durMs = (frame.t_mono_ns - rec.startNs) / 1e6;
+    rec.moving = false;
+    // Below one stride the "movement" is one window's worth of noise. Drop the
+    // offset AND retract nothing: the onset already went out, so instead of
+    // rewriting history the detector leaves the pair visible and lets the
+    // duration say it was 0 ms. Suppressing the offset would strand the consumer
+    // in the movement state forever, which is worse than a short event.
+    mk(T0.MOVEMENT_OFFSET, { duration_ms: Number(Math.max(0, durMs).toFixed(1)) });
+    if (durMs < T0_MIN_MS) rec.shortRuns += 1;
+  }
+  return out;
+}
+
 /* R-5.7.1 — the last analysis window ending at or before t = 2.000 s, never an
  * average and never the first window. Window membership is the same rule the
  * live windower uses: t_end - WINDOW_MS < t <= t_end. */
@@ -426,7 +516,7 @@ function buildCapability(state) {
     vendor: "akasara",
     model: state.sourceKind === "sim" ? "gate-web-sim" : "gate-web-imu",
     firmware: BUILD,
-    tiers: ["t1"],
+    tiers: ["t1", "t0"],
     profiles: [],
     signal: {
       kind: "imu",
@@ -457,6 +547,20 @@ function buildCapability(state) {
       latency_typ_ms: WINDOW_MS / 2,
       latency_max_ms: WINDOW_MS + STRIDE_MS,
       lossless_encodings: ["f32"],
+    },
+    /* R-3.2 — the events are exposed ALONGSIDE T1, which is the whole clause.
+     * derived_from_t1 is the honest and the checkable answer: this recogniser
+     * consumes the exported vectors and nothing the consumer cannot see, so
+     * R-3.2.2 obliges every event to name its frame and the suite verifies the
+     * citation resolves. confidence is false because a hysteresis threshold has
+     * no posterior (R-3.2.1), which also means these events cannot use the ABF
+     * encoding (R-9.5). */
+    t0: {
+      event_space: EVENT_SPACE,
+      events: T0_EVENTS,
+      derived_from_t1: true,
+      confidence: false,
+      documentation: "https://github.com/breadMSA/Akasara/blob/main/apps/gate/README.md#t0-events",
     },
     clock: {
       rtc: true,
@@ -531,6 +635,9 @@ const state = {
   cue: null,            // {id, name, from, to} while a hold period is running
   protocol: null,       // the schedule being walked, or null
   labelled: 0,
+  // T0 recogniser state. seq is the T0 counter of R-3.2.1 and is deliberately
+  // NOT derived from the T1 counter.
+  rec: { seq: 0, moving: false, startNs: 0, shortRuns: 0 },
 };
 
 /* ================================================================ cued protocol
@@ -711,16 +818,41 @@ function syncExportButtons() {
  */
 function applyGrant(frames, g) {
   const allowance = Math.max(0, g.max_frames - g.released);
-  const taken = frames.slice(-allowance);
+  const sliced = frames.slice(-allowance);
+
+  /* A grant releases the LAST n records, and the cut can land between a T0 event
+   * and the T1 frame it cites — leaving the consumer an event whose evidence was
+   * withheld, which R-3.2.2 exists to forbid. The exporter is the party that
+   * knows what it truncated, so it drops the orphaned event rather than shipping
+   * an unverifiable claim. Found by exporting under a small allowance, not by
+   * reading the clause. */
+  const keptT1 = new Set(
+    sliced.filter((f) => f.tier === "t1").map((f) => `${f.session_id}#${f.seq}`));
+  const taken = sliced.filter((f) =>
+    f.tier !== "t0" || f.t1_seq === undefined || keptT1.has(`${f.session_id}#${f.t1_seq}`));
+
   return taken.map((f) => {
     const out = {
       tier: f.tier,
       t_mono_ns: f.t_mono_ns,
       session_id: g.fields.session_id ? f.session_id : pseudonym(f.session_id, g.salt),
       seq: f.seq,
-      feature_space: f.feature_space,
-      values: f.values,
     };
+    if (f.tier === "t0") {
+      /* A T0 record carries no values[] to redact, but it does carry t1_seq —
+       * the citation R-3.2.2 requires. It is NOT optional under a grant: an
+       * event stripped of its evidence is exactly the unfalsifiable claim the
+       * clause exists to prevent, and the session-id pseudonym above already
+       * keeps the citation from linking anything across grants. */
+      out.event_space = f.event_space;
+      out.code = f.code;
+      if (f.t1_seq !== undefined) out.t1_seq = f.t1_seq;
+      out.duration_ms = f.duration_ms;
+      if (f.confidence !== undefined) out.confidence = f.confidence;
+    } else {
+      out.feature_space = f.feature_space;
+      out.values = f.values;
+    }
     if (g.fields.t_wall_ms) out.t_wall_ms = f.t_wall_ms;
     if (g.fields.quality) out.quality = f.quality;
     /* Withholding the cue is a real choice, not a formality: the cue says what
@@ -881,8 +1013,17 @@ function emitFrame() {
   }
 
   state.frames.push(frame);
-  if (state.frames.length > MAX_FRAMES) state.frames.shift();
   if (streamActive()) pushToBridge(frame);
+
+  /* T0 rides in the same buffer as T1, in time order. That is not a shortcut:
+   * it means the ring buffer, the grant allowance, the redaction in applyGrant
+   * and every export path apply to events by construction, so a T0 record cannot
+   * escape through a path that only learned about frames. */
+  for (const ev of recognise(state.rec, frame)) {
+    state.frames.push(ev);
+    if (streamActive()) pushToBridge(ev);
+  }
+  while (state.frames.length > MAX_FRAMES) state.frames.shift();
 
   if (state.samples.length > 1) {
     const span = state.samples[state.samples.length - 1].t - state.samples[0].t;
@@ -894,7 +1035,9 @@ function emitFrame() {
 function renderSource(frame) {
   $("st-session").textContent = state.sessionId || "—";
   $("st-don").textContent = state.donCount;
-  $("st-frames").textContent = state.frames.length;
+  $("st-frames").textContent = state.frames.filter((f) => f.tier === "t1").length;
+  $("st-events").textContent = state.frames.filter((f) => f.tier === "t0").length +
+    (state.rec.moving ? " (in movement)" : "");
   $("st-rate").textContent = state.measuredRate
     ? `${state.measuredRate.toFixed(1)} Hz (declared ${NOMINAL_RATE[state.sourceKind]})`
     : "—";
@@ -943,6 +1086,8 @@ async function startSession() {
   state.samples = [];
   state.received = 0;
   state.clipped = new Array(CHANNELS).fill(0);
+  // A new session restarts the T0 counter with the T1 one; both are per-session.
+  state.rec = { seq: 0, moving: false, startNs: 0, shortRuns: 0 };
   state.donCount += 1;
   localStorage.setItem("gate.don", String(state.donCount));
 
@@ -1269,7 +1414,13 @@ function handleControl(msg) {
       reply = { token: c.token, t_mono_ns: Math.round(performance.now() * 1e6) };
       break;
     case "set_tier":
-      reply = c.tier === "t1" ? { ok: true, tier: "t1" } : { ok: false, reason: "this source exports T1 only" };
+      /* T1 and T0 are both always on: R-3.2 forbids offering the events as a
+       * substitute for the frames, and a set_tier that could switch T1 off would
+       * be exactly that switch. So the only honest answer to "t0" is that it is
+       * already flowing, not that it has been selected. */
+      reply = c.tier === "t1" || c.tier === "t0"
+        ? { ok: true, tiers: ["t1", "t0"], note: "both tiers stream unconditionally; T0 is never a substitute for T1 (R-3.2)" }
+        : { ok: false, reason: `this source exports t1 and t0, not ${c.tier}` };
       break;
     case "set_encoding":
       reply = c.venc === "f32" ? { ok: true, venc: "f32" } : { ok: false, reason: "this source encodes f32 over JSON only" };
@@ -1291,7 +1442,8 @@ function handleControl(msg) {
  */
 function verify() {
   const cap = buildCapability(state);
-  const frames = state.frames;
+  const frames = state.frames.filter((f) => f.tier === "t1");
+  const events = state.frames.filter((f) => f.tier === "t0");
   const rows = [];
   const add = (ok, id, msg) => rows.push({ ok, id, msg });
 
@@ -1361,6 +1513,41 @@ function verify() {
       "R-5.4.1",
       `values[] declared ${cap.t1.layout}, ${cap.t1.dim / cap.signal.channels} features x ${cap.signal.channels} channels`);
     add(Boolean(state.sessionId), "R-6.1", "session_id present");
+  }
+
+  /* §3 T0. The check worth having in the page is R-3.2.2: every event must cite
+   * a T1 frame that is HERE and that ended no later than the event. A recogniser
+   * wired to the wrong buffer, or an off-by-one in the citation, fails this and
+   * nothing else — which is the failure mode the clause was written for. */
+  if (cap.tiers.includes("t0")) {
+    const registry = new Set(cap.t0.events.map((e) => e.code));
+    if (events.length === 0) {
+      add(null, "R-3.2", "t0 declared but no event recognised yet — hold the phone still, then move it");
+    } else {
+      const byKey = new Map(frames.map((f) => [`${f.session_id}#${f.seq}`, f]));
+      let codeOk = true, citeOk = true, orderOk = true, t0SeqOk = true, confOk = true;
+      let lastSeq = -Infinity;
+      for (const e of events) {
+        if (!registry.has(e.code)) codeOk = false;
+        if (e.seq <= lastSeq) t0SeqOk = false;
+        lastSeq = e.seq;
+        if (e.confidence !== undefined) confOk = false;   // t0.confidence is false
+        const src = byKey.get(`${e.session_id}#${e.t1_seq}`);
+        if (!src) citeOk = false;
+        else if (src.t_mono_ns > e.t_mono_ns) orderOk = false;
+      }
+      add(codeOk, "R-3.2.1", `${events.length} event(s), every code in the t0.events[] registry`);
+      add(t0SeqOk, "R-3.2.1", "T0 seq strictly increasing, and counted separately from T1");
+      add(confOk, "R-3.2.1",
+        "t0.confidence is false and no event invents one — a threshold detector has no posterior");
+      add(citeOk && orderOk, "R-3.2.2", citeOk && orderOk
+        ? `every event cites a T1 frame held here, ending at or before the event`
+        : citeOk
+          ? "an event cites a T1 frame that ends AFTER it fired"
+          : "an event cites a t1_seq not present in this buffer");
+      add(cap.tiers.includes("t1"), "R-3.2",
+        `T0 exported alongside T1 (${events.length} event(s), ${frames.length} frame(s))`);
+    }
   }
 
   const st = state.lastSelftest;

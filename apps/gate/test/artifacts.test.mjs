@@ -35,6 +35,7 @@ function loadPureModule() {
     "DURATION_S", "selftestInput", "t1Transform", "runSelftest", "buildCapability",
     "capabilityUnderGrant",
     "FEATURE_SPACE", "CHANNELS", "DIM", "WINDOW_MS", "STRIDE_MS", "NOMINAL_RATE", "FULL_SCALE",
+    "recognise", "motionEnergy", "EVENT_SPACE", "T0", "T0_EVENTS", "T0_ENTER", "T0_EXIT",
   ];
   return new Function(`${src}\nreturn {${exportNames.join(",")}};`)();
 }
@@ -148,6 +149,118 @@ test("a grant withholding t_wall_ms still exports a conformant capture (R-5.1)",
   const stripped = runSuite(kept, frames, app.runSelftest(kept.signal.sample_rate_hz));
   assert.equal(stripped.code, 1);
   assert.match(stripped.out, /R-5\.1/);
+});
+
+/* ------------------------------------------------------------------ §3 T0 --
+ * The tier that had no implementation and, as it turned out, no wire format.
+ * These drive the recogniser over a synthetic still→move→still trace, then put
+ * the resulting mixed capture through the real suite.
+ */
+
+/** rest, then movement, then rest — in the units the recogniser sees. */
+function makeMixedCapture(cap, { restFrames = 6, moveFrames = 10 } = {}) {
+  const rec = { seq: 0, moving: false, startNs: 0, shortRuns: 0 };
+  const records = [];
+  const events = [];
+  const plan = [
+    ...new Array(restFrames).fill(0.005),                 // below T0_EXIT
+    ...new Array(moveFrames).fill(0.35),                  // above T0_ENTER
+    ...new Array(restFrames).fill(0.005),
+  ];
+  plan.forEach((rms, i) => {
+    const values = new Array(cap.t1.dim);
+    for (let c = 0; c < cap.signal.channels; c++) {
+      values[2 * c] = rms;          // channel-major: [RMS, WL] per channel
+      values[2 * c + 1] = rms / 2;
+    }
+    const frame = {
+      tier: "t1",
+      t_mono_ns: (i + 1) * cap.t1.stride_ms * 1e6,
+      t_wall_ms: 1785000000000 + i * cap.t1.stride_ms,
+      session_id: "s-test0001",
+      seq: i,
+      feature_space: cap.t1.feature_space,
+      values,
+      quality: new Array(cap.signal.channels).fill(0.97),
+    };
+    records.push(frame);
+    for (const ev of app.recognise(rec, frame)) { records.push(ev); events.push(ev); }
+  });
+  return { records, events, rec };
+}
+
+test("the recogniser fires one onset and one offset, with a real duration", () => {
+  const cap = app.buildCapability(makeState({ bridgeUri: "ws://127.0.0.1:8765" }));
+  const { events } = makeMixedCapture(cap);
+  assert.equal(events.length, 2, "hysteresis must not chatter on a clean step");
+  assert.equal(events[0].code, app.T0.MOVEMENT_ONSET);
+  assert.equal(events[1].code, app.T0.MOVEMENT_OFFSET);
+  // 10 move frames at 100 ms stride, offset fires on the first frame back at rest.
+  assert.ok(events[1].duration_ms >= 1000 && events[1].duration_ms <= 1200,
+    `duration ${events[1].duration_ms} ms is not the movement it measured`);
+  // R-3.2.1: the T0 counter is its own.
+  assert.deepEqual(events.map((e) => e.seq), [0, 1]);
+  // R-3.2.1: a threshold detector declares no posterior rather than inventing 1.0.
+  assert.ok(events.every((e) => e.confidence === undefined));
+  assert.equal(cap.t0.confidence, false);
+});
+
+test("hysteresis is what stops the chatter, and a single threshold would not", () => {
+  // A signal sitting between the two thresholds must produce NOTHING after the
+  // first transition — that is the whole reason there are two numbers.
+  const cap = app.buildCapability(makeState());
+  const rec = { seq: 0, moving: false, startNs: 0, shortRuns: 0 };
+  const between = (app.T0_ENTER + app.T0_EXIT) / 2;
+  let fired = 0;
+  for (let i = 0; i < 30; i++) {
+    const values = new Array(cap.t1.dim).fill(0);
+    for (let c = 0; c < cap.signal.channels; c++) values[2 * c] = between;
+    fired += app.recognise(rec, {
+      t_mono_ns: (i + 1) * 1e8, t_wall_ms: 1785000000000 + i, session_id: "s", seq: i,
+      values, quality: [1, 1, 1, 1, 1, 1],
+    }).length;
+  }
+  assert.equal(fired, 0, "a level inside the hysteresis band must not emit events");
+  assert.equal(rec.moving, false);
+});
+
+test("a mixed T1+T0 capture is CONFORMANT and the citations resolve (R-3.2.2)", () => {
+  const cap = app.buildCapability(makeState({ bridgeUri: "ws://127.0.0.1:8765" }));
+  const { records } = makeMixedCapture(cap);
+  const { code, out } = runSuite(cap, records, app.runSelftest(cap.signal.sample_rate_hz));
+  assert.equal(code, 0, `mixed capture must be conformant:\n${out}`);
+  assert.match(out, /PASS\s+R-3\.2\.2/);
+  assert.match(out, /PASS\s+R-3\.2\s/);
+});
+
+test("an event citing a frame that is not in the capture FAILS R-3.2.2", () => {
+  const cap = app.buildCapability(makeState({ bridgeUri: "ws://127.0.0.1:8765" }));
+  const { records } = makeMixedCapture(cap);
+  const ev = records.find((r) => r.tier === "t0");
+  ev.t1_seq = 9999;                                  // a decision with no evidence
+  const { code, out } = runSuite(cap, records, app.runSelftest(cap.signal.sample_rate_hz));
+  assert.equal(code, 1);
+  assert.match(out, /FAIL\s+R-3\.2\.2/);
+});
+
+test("an event citing a frame that ends after it FAILS R-3.2.2", () => {
+  const cap = app.buildCapability(makeState({ bridgeUri: "ws://127.0.0.1:8765" }));
+  const { records } = makeMixedCapture(cap);
+  const t1 = records.filter((r) => r.tier === "t1");
+  const ev = records.find((r) => r.tier === "t0");
+  ev.t1_seq = t1[t1.length - 1].seq;                 // the future, cited as evidence
+  const { code, out } = runSuite(cap, records, app.runSelftest(cap.signal.sample_rate_hz));
+  assert.equal(code, 1);
+  assert.match(out, /FAIL\s+R-3\.2\.2/);
+});
+
+test("an unregistered event code FAILS R-3.2.1", () => {
+  const cap = app.buildCapability(makeState({ bridgeUri: "ws://127.0.0.1:8765" }));
+  const { records } = makeMixedCapture(cap);
+  records.find((r) => r.tier === "t0").code = 4242;
+  const { code, out } = runSuite(cap, records, app.runSelftest(cap.signal.sample_rate_hz));
+  assert.equal(code, 1);
+  assert.match(out, /FAIL\s+R-3\.2\.1/);
 });
 
 test("quality is per channel, not per feature dimension (R-5.6)", () => {

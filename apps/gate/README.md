@@ -76,6 +76,39 @@ fraction of the window's expected samples that actually arrived, reduced by the
 fraction of samples that clipped. It is a measurement of the acquisition, never a
 confidence in what the values mean.
 
+## T0 events
+
+The gate exports T0 alongside T1 (R-3.2), from a recogniser that runs on the
+exported T1 vectors and nothing else. Two codes:
+
+| code | label | when |
+| --- | --- | --- |
+| 1 | `movement_onset` | mean per-channel RMS crosses **0.06** upward |
+| 2 | `movement_offset` | it falls back below **0.03**, with the movement's `duration_ms` |
+
+Two thresholds rather than one because a single one chatters: a hand held still
+hovers around whatever value you pick and emits a burst of onsets. `T0_ENTER` and
+`T0_EXIT` are in normalised full scale, set from the resting band of a handheld
+phone.
+
+**It declares no confidence, on purpose.** A hysteresis threshold does not have a
+posterior, and R-3.2.1 says a device without one omits the field rather than
+emitting 1.0 — so `t0.confidence` is `false` here, and by R-9.5 these events go
+out as JSON rather than ABF. Manufacturing a plausible number from the distance
+to the threshold would have made the tier look more finished than the recogniser
+is.
+
+**Every event names its evidence.** `t0.derived_from_t1` is true, so R-3.2.2
+obliges each event to carry `t1_seq` — the `seq` of the T1 frame the recogniser
+decided on — and the conformance suite checks that citation resolves to a frame
+present in the capture whose window ended no later than the event. That one
+integer is the difference between a vendor's claim and something a host can
+re-derive. It is also why the egress path drops an event whose cited frame fell
+outside the grant's allowance: a grant releases the last *n* records, the cut can
+land between an event and its frame, and shipping the event without its evidence
+is precisely what the clause forbids. Found by exporting under a small allowance,
+not by reading the clause.
+
 ## What conformance this build actually has
 
 Run the spec's own suite over the three files this app exports:
@@ -85,7 +118,14 @@ node spec/conformance/check.mjs capability.json frames.jsonl selftest.json
 ```
 
 Measured on an S21 FE, real IMU, streaming over the bridge:
-**CONFORMANT, 18 pass, 0 fail, 2 warn.**
+**CONFORMANT, 18 pass, 0 fail, 2 warn** (2026-07-29, before T0).
+
+With the T0 tier added the same descriptor and a capture containing events reads
+**CONFORMANT, 23 pass, 0 fail, 2 warn** — the five extra passes are the R-3.2 /
+R-3.2.1 / R-3.2.2 rows. Stated separately because that run is the test harness
+driving the app's own recogniser over a synthetic still→move→still trace, not the
+phone: **the 23 has not yet been re-measured on the real IMU.** The 18 is the
+number that came off hardware.
 
 Running `bridge.mjs` is not what makes R-7.1 pass. The descriptor declares the
 loopback transport only while the socket is actually open, so **Start streaming**
