@@ -9,13 +9,23 @@ model, the transport, and the gate deciding what may leave — is real, and none
 it changes when the source is swapped for an EMG band or an EEG headset. The
 signal is the only part that is standing in.
 
-Two halves:
+Three parts:
 
 - **Source** — IMU samples in, T1 feature frames out, in a pinned feature space,
   with a working R-5.7 self-test and a §10.3 loopback transport.
+- **Cued protocol** — ten movements, prompted on a timer, so two devices produce
+  captures that can be aligned to each other. A window is labelled only when it
+  lies entirely inside a hold period; anything straddling a boundary is left
+  unlabelled rather than assigned to whichever cue covers more of it. The label
+  rides on `akasara.cue`, the same vendor-extension field the replay producer in
+  `../replay` writes, so a consumer cannot tell which one produced a capture.
 - **Gate** — nothing leaves this device unless a grant you wrote says it may.
   Default deny, no allow-all, every grant expires, revocation reaches a stream
-  already in flight.
+  already in flight. The cue is its own grant field: it says what the person was
+  asked to *do*, which the signal alone does not carry, so withholding it is a
+  real choice and not a formality. Withholding it can never make the capture
+  non-conformant — it is a vendor extension — and there is a test that keeps
+  that true.
 
 No account, no network, no server. Frames live in memory and die with the tab;
 grants and the audit ledger live in this browser's own storage and nowhere else.
@@ -75,7 +85,7 @@ node spec/conformance/check.mjs capability.json frames.jsonl selftest.json
 ```
 
 Measured on an S21 FE, real IMU, streaming over the bridge:
-**CONFORMANT, 17 pass, 0 fail, 2 warn.**
+**CONFORMANT, 18 pass, 0 fail, 2 warn.**
 
 Running `bridge.mjs` is not what makes R-7.1 pass. The descriptor declares the
 loopback transport only while the socket is actually open, so **Start streaming**
@@ -97,6 +107,51 @@ Without the bridge, the descriptor honestly declares no local transport and the
 suite reports **NOT CONFORMANT on R-7.1** — a browser cannot bind a listening
 socket. That failure is the measured reason for a native build, and it is left
 visible rather than papered over.
+
+## Running a paired capture
+
+Two phones, two people, one shared protocol. The point is not the movements —
+they are arbitrary. The point is that both captures carry the same cue
+vocabulary, so a consumer can ask whether one person's signal predicts the
+other's on movements it was never fitted on.
+
+1. Both phones: serve the repo over `localhost` (see above), open the page,
+   **Start session**.
+2. Set the same hold, rest and reps on both. Defaults are 3 s hold, 2 s rest,
+   3 reps — ten cues, so about 2.5 minutes.
+3. Press **Run protocol** on both at roughly the same moment. Exact
+   synchronisation is not needed and is not what the cue is for: the cue is a
+   label, not a timestamp, and each device labels its own windows by its own
+   clock. R-5.2.1's measurement is the reason this is safe — a 400 ms offset
+   between two people costs under 1% at gesture granularity.
+4. Read the prompts and do them. Hold still during the rest periods; those
+   windows are deliberately unlabelled and are what a consumer uses as the
+   negative case.
+5. Each phone: create a grant with `akasara.cue` included, export
+   `capability.json` and `frames.jsonl`.
+6. Put each phone's three files in its own directory and feed both to
+   `apps/replay/align.py`, which does not care that these came from a phone
+   rather than a dataset:
+
+   ```
+   python apps/replay/align.py out/phone-a out/phone-b
+   ```
+
+   Ten cues means five fitted on and five held out, so chance is 0.200 and the
+   whole run is one ordered pair each way — enough to see the pipeline work end
+   to end, nowhere near enough for an interval. `align.py` knows this app's
+   feature space is channel-major and reduces it accordingly; it refuses a space
+   it has not been told about rather than guessing, because getting that wrong
+   silently averages RMS together with waveform length.
+
+   Two phones is also below `align.py`'s own bar: it bootstraps over subjects,
+   and two subjects give an interval that means nothing. Treat the first paired
+   run as a wiring test, not a result.
+
+What this can and cannot show: two phones held by **one** person is a
+cross-device test, which is a real question but not a cross-person one. The
+cross-person claim needs two bodies. Either way the capture is the same shape,
+so the harness is worth having before the second person is.
 
 ## The gate
 
