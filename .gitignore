@@ -11,3 +11,6 @@ hub-explorer/
 
 # replay captures — derived from third-party datasets, and large
 apps/replay/out/
+
+# brainflow captures — reproducible in one command, no reason to carry them
+apps/brainflow/out/
