@@ -340,6 +340,92 @@ def _():
         assert worst == 0.0, f"{venc}: decoded values differ by {worst}"
 
 
+ABF_EVENT = {
+    "tier": "t0", "t_mono_ns": 1234567890123, "t_wall_ms": 1785000000000,
+    "session_id": "s-1", "seq": 7, "event_space": "r.v1",
+    "code": 300, "confidence": 0.875, "t1_seq": 412, "duration_ms": 640,
+    "quality": 0.5,
+}
+
+
+def node_abf_t0(direction, payload, session_ord=2):
+    from pathlib import Path
+    abf_url = Path(os.path.join(CONF, "abf.mjs")).as_uri()
+    script = f'''
+import {{ encodeT0, decodeT0 }} from {json.dumps(abf_url)};
+const arg = process.argv[2];
+if ({json.dumps(direction)} === "encode") {{
+  console.log(encodeT0(JSON.parse(arg), {{ sessionOrd: {session_ord} }}).toString("hex"));
+}} else {{
+  console.log(JSON.stringify(decodeT0(Buffer.from(arg, "hex"))));
+}}
+'''
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "abft0.mjs")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(script)
+        r = subprocess.run([node(), path, payload],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", check=True)
+    return r.stdout.strip()
+
+
+@test("ABF: the brand-new T0 payload is byte-identical across the two codecs")
+def _():
+    """The R-5.4.1 lesson applied forward. R-9.5 was written today; the only way
+    to know the table is implementable from the text is to implement it twice and
+    diff the bytes, BEFORE a vendor does it in firmware."""
+    import abf
+    ours = abf.encode_t0(ABF_EVENT, session_ord=2).hex()
+    theirs = node_abf_t0("encode", json.dumps(ABF_EVENT))
+    assert ours == theirs, (
+        "the two implementations of S9.5 disagree byte-for-byte\n"
+        f"  py {ours}\n  js {theirs}")
+    assert len(bytes.fromhex(ours)) == abf.HEADER_BYTES + abf.T0_PAYLOAD_BYTES + 8, (
+        "a T0 message with a wall-clock trailer is 24 + 16 + 8 bytes")
+
+
+@test("ABF: each codec decodes the other's T0 bytes to the same event")
+def _():
+    import abf
+    theirs_hex = node_abf_t0("encode", json.dumps(ABF_EVENT))
+    mine = abf.decode_t0(bytes.fromhex(theirs_hex))
+    js = json.loads(node_abf_t0("decode", theirs_hex))
+    for field in ("seq", "code", "t1_seq", "duration_ms", "t_mono_ns", "_bytes"):
+        assert mine[field] == js[field], f"{field}: py {mine[field]} vs js {js[field]}"
+    assert abs(mine["confidence"] - js["confidence"]) == 0.0
+
+
+@test("R-3.2.2: absent t1_seq survives as absent in both codecs, not as seq 0")
+def _():
+    import abf
+    ev = dict(ABF_EVENT)
+    ev.pop("t1_seq")
+    ours = abf.decode_t0(abf.encode_t0(ev))
+    theirs = json.loads(node_abf_t0("decode", node_abf_t0("encode", json.dumps(ev))))
+    assert "t1_seq" not in ours, "an undeclared derivation decoded as a citation"
+    assert "t1_seq" not in theirs, "reference codec invented a citation"
+
+
+@test("R-9.5: both codecs refuse a T0 event with no confidence, rather than saturating it")
+def _():
+    import abf
+    ev = dict(ABF_EVENT)
+    ev.pop("confidence")
+    try:
+        abf.encode_t0(ev)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("encoded an event whose confidence does not exist")
+    try:
+        node_abf_t0("encode", json.dumps(ev))
+    except subprocess.CalledProcessError:
+        pass
+    else:
+        raise AssertionError("reference codec encoded a confidence it was not given")
+
+
 @test("ABF: f32 is exact, and the narrow encodings stay inside R-9.1 territory")
 def _():
     import abf
@@ -395,6 +481,135 @@ def _():
             json.dump(cap, fh)
         code, out = check(p, os.path.join(VECTORS, "good.frames.jsonl"))
     assert code == 1 and "FAIL  R-5.4.1" in out, out
+
+
+# ------------------------------------------------------ §3 T2 / T3 (R-3.3.1)
+
+def _raw_cap(**over):
+    """A minimal conformant descriptor to hang raw-tier variations off."""
+    with open(os.path.join(VECTORS, "good.capability.json"), encoding="utf-8") as fh:
+        cap = json.load(fh)
+    cap.update(over)
+    return cap
+
+
+def _check_cap(cap):
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "capability.json")
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(cap, fh)
+        return check(p, os.path.join(VECTORS, "good.frames.jsonl"),
+                     os.path.join(VECTORS, "good.selftest-output.json"))
+
+
+@test("R-3.3.1: a declared t3 badge with no unit or ADC width is not conformant")
+def _():
+    cap = _raw_cap(profiles=["ase.t3"], tiers=["t0", "t1", "t3"])
+    cap["t3"] = {"channels": 4, "sample_rate_hz": 2000, "layout": "sample-major"}
+    code, out = _check_cap(cap)
+    assert code == 1 and "FAIL  R-3.3.1" in out, out
+    assert "adc_bits" in out and "lsb_per_unit" in out, out
+
+
+@test("R-3.3.1: a fully described t3 passes, and one below the native rate does not")
+def _():
+    good = {"channels": 4, "sample_rate_hz": 2000, "layout": "sample-major",
+            "adc_bits": 8, "unit": "count", "lsb_per_unit": 1}
+    cap = _raw_cap(profiles=["ase.t3"], tiers=["t0", "t1", "t3"], t3=dict(good))
+    code, out = _check_cap(cap)
+    assert code == 0, f"a fully described T3 must pass:\n{out}"
+    assert "PASS  R-3.3.1" in out, out
+
+    # T3 is the native rate by definition, so a decimated stream is not T3.
+    slow = _raw_cap(profiles=["ase.t3"], tiers=["t0", "t1", "t3"],
+                    t3={**good, "sample_rate_hz": 500})
+    code, out = _check_cap(slow)
+    assert code == 1 and "FAIL  R-3.3.1" in out, out
+
+
+@test("R-3.3: a tier in tiers[] with no badge in profiles[] is caught")
+def _():
+    cap = _raw_cap(tiers=["t0", "t1", "t2"], profiles=[])
+    cap["t2"] = {"channels": 4, "sample_rate_hz": 2000, "unit": "uV",
+                 "layout": "sample-major", "filters": [{"kind": "highpass", "hz": 20}]}
+    code, out = _check_cap(cap)
+    assert code == 1 and "FAIL  R-3.3" in out, out
+
+
+@test("R-3.3.1: 'count' is a T3-only unit; a filtered stream must say a.u.")
+def _():
+    cap = _raw_cap(profiles=["ase.t2"], tiers=["t0", "t1", "t2"])
+    cap["t2"] = {"channels": 4, "sample_rate_hz": 2000, "unit": "count",
+                 "layout": "sample-major", "filters": [{"kind": "highpass", "hz": 20}]}
+    code, out = _check_cap(cap)
+    assert code == 1 and "FAIL  R-3.3.1" in out, out
+    ok = dict(cap["t2"], unit="a.u.")
+    code, out = _check_cap(_raw_cap(profiles=["ase.t2"], tiers=["t0", "t1", "t2"], t2=ok))
+    assert code == 0, out
+
+
+@test("the T2 chain applied is the chain declared, and it changes the samples")
+def _():
+    import replay
+    rng = np.random.default_rng(0)
+    fs = 200.0
+    n = 800
+    t = np.arange(n) / fs
+    # A 50 Hz mains component the declared notch must remove, plus drift the
+    # declared highpass must remove.
+    x = (rng.normal(0, 0.05, size=(n, 2))
+         + 0.4 * np.sin(2 * np.pi * 50 * t)[:, None]
+         + np.linspace(0, 0.5, n)[:, None])
+    chain = [{"kind": "highpass", "hz": 20, "order": 4},
+             {"kind": "notch", "hz": 50, "q": 30},
+             {"kind": "lowpass", "hz": 95, "order": 4}]
+    y = replay.apply_t2_chain(x, fs, chain)
+    assert y.shape == x.shape
+    # Power at 50 Hz must drop by a lot; power in the passband must survive.
+    def power_at(sig_, hz):
+        f = np.fft.rfftfreq(n, 1 / fs)
+        P = np.abs(np.fft.rfft(sig_[:, 0]))
+        return float(P[np.argmin(np.abs(f - hz))])
+    assert power_at(y, 50) < 0.05 * power_at(x, 50), "the declared notch did nothing"
+    assert abs(y[:, 0].mean()) < 0.05, "the declared highpass left the drift in"
+
+
+@test("R-3.3.1: a chain that cannot exist at the sample rate is refused, not run")
+def _():
+    import replay
+    x = np.zeros((400, 2))
+    try:
+        # 450 Hz upper corner at a 200 Hz sample rate: above Nyquist.
+        replay.apply_t2_chain(x, 200.0, [{"kind": "lowpass", "hz": 450}])
+    except SystemExit as e:
+        assert "R-3.3.1" in str(e), str(e)
+    else:
+        raise AssertionError("a lowpass above Nyquist was silently accepted")
+
+
+@test("a source that cannot describe its raw samples gets no badge (R-3.3.1)")
+def _():
+    import replay
+
+    class Honest:                       # DB5-like: 8-bit counts, describable
+        channels, sample_rate_hz = 16, 200.0
+        t3 = {"adc_bits": 8, "unit": "count", "lsb_per_unit": 1}
+        t2_filters = [{"kind": "highpass", "hz": 20, "order": 4}]
+        t2_unit = "a.u."
+
+    class Unknowable:                   # PD-EEG-like: unit and ADC width unknown
+        channels, sample_rate_hz = 19, 300.0
+        t3 = None
+        t2_filters = [{"kind": "detrend"}]
+        t2_unit = "a.u."
+
+    badges, blocks = replay.raw_tier_blocks(Honest())
+    assert badges == ["ase.t2", "ase.t3"], badges
+    assert blocks["t3"]["unit"] == "count" and blocks["t3"]["adc_bits"] == 8
+
+    badges, blocks = replay.raw_tier_blocks(Unknowable())
+    assert badges == ["ase.t2"], f"a T3 badge was claimed with no honest unit: {badges}"
+    assert "t3" not in blocks
 
 
 @test("align: the R-11.5 baseline collapses channels, not feature types")

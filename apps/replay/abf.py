@@ -104,6 +104,87 @@ def encode_t1(frame, venc="f32", session_ord=0, adapt_ord=0,
     return bytes(out)
 
 
+T0_PAYLOAD_BYTES = 16
+T1_SEQ_ABSENT = 0xFFFFFFFF
+
+
+def encode_t0(ev, session_ord=0, schedule_ord=0, item_ord=0):
+    """§9.5. Written from the table in the same way as encode_t1 -- the point
+    being that a second implementation of a brand-new clause is the only thing
+    that shows the clause is implementable from the text alone."""
+    if ev.get("confidence") is None:
+        raise ValueError("R-9.5: a T0 event without confidence cannot use the ABF encoding")
+    t1_seq = ev.get("t1_seq")
+    if t1_seq is not None and t1_seq >= T1_SEQ_ABSENT:
+        raise ValueError(f"R-9.5: t1_seq {t1_seq} collides with the absent sentinel")
+
+    flags = 0
+    if ev.get("anchor") is not None:
+        flags |= FLAG_ANCHOR
+    if ev.get("t_wall_ms") is not None:
+        flags |= FLAG_WALL
+
+    out = bytearray()
+    out += struct.pack("<BBBBHHIIQ", TYPE_T0, flags, VENC["f32"], 0, 0,
+                       _fixed(float(ev.get("quality") or 0.0), 65535),
+                       ev["seq"], session_ord, ev["t_mono_ns"])
+    out += struct.pack("<HHIII", ev["code"], _fixed(float(ev["confidence"]), 65535),
+                       T1_SEQ_ABSENT if t1_seq is None else t1_seq,
+                       round(ev.get("duration_ms") or 0), 0)
+
+    if flags & FLAG_ANCHOR:
+        a = ev["anchor"]
+        out += struct.pack("<IIQf", schedule_ord, item_ord,
+                           a["t_stim_mono_ns"], a["timing_err_ms"])
+    if flags & FLAG_WALL:
+        out += struct.pack("<Q", ev["t_wall_ms"])
+    return bytes(out)
+
+
+def decode_t0(buf):
+    if len(buf) < HEADER_BYTES + T0_PAYLOAD_BYTES:
+        raise ValueError("short buffer")
+    (typ, flags, code, reserved, dim, quality_q, seq, session_ord,
+     t_mono_ns) = struct.unpack_from("<BBBBHHIIQ", buf, 0)
+    if typ != TYPE_T0:
+        raise ValueError(f"not a T0 event (type 0x{typ:02x})")
+    if reserved != 0:
+        raise ValueError("reserved byte must be 0")
+    if flags & (FLAG_QUALITY_CH | FLAG_ADAPT):
+        raise ValueError("R-9.5: flag bits 0 and 1 MUST be 0 on a T0 message")
+    if code != VENC["f32"]:
+        raise ValueError("R-9.5: venc MUST be 0x00 on a T0 message")
+    if dim != 0:
+        raise ValueError("R-9.5: dim MUST be 0 on a T0 message")
+
+    ev_code, conf_q, t1_seq, duration_ms, res2 = struct.unpack_from(
+        "<HHIII", buf, HEADER_BYTES)
+    if res2 != 0:
+        raise ValueError("R-9.5: reserved word must be 0")
+
+    out = {
+        "tier": "t0", "seq": seq, "session_ord": session_ord,
+        "t_mono_ns": t_mono_ns, "quality": quality_q / 65535,
+        "code": ev_code, "confidence": conf_q / 65535,
+        "duration_ms": duration_ms,
+    }
+    if t1_seq != T1_SEQ_ABSENT:
+        out["t1_seq"] = t1_seq
+
+    off = HEADER_BYTES + T0_PAYLOAD_BYTES
+    if flags & FLAG_ANCHOR:
+        s_ord, i_ord, t_stim, err = struct.unpack_from("<IIQf", buf, off)
+        out["anchor"] = {"schedule_ord": s_ord, "item_ord": i_ord,
+                         "t_stim_mono_ns": t_stim, "timing_err_ms": err}
+        off += 20
+    if flags & FLAG_WALL:
+        out["t_wall_ms"] = struct.unpack_from("<Q", buf, off)[0]
+        off += 8
+
+    out["_bytes"] = off
+    return out
+
+
 def decode_t1(buf, channels=None):
     if len(buf) < HEADER_BYTES:
         raise ValueError("short buffer")

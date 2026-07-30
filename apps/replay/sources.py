@@ -55,6 +55,34 @@ class Db5Source:
     mains_hz = 50.0                    # recorded in Italy
     MYO_WIDTH_MM = 40                  # nominal; see class docstring
 
+    # R-3.3.1 — what the raw numbers ARE.
+    #
+    # The Myo's raw sEMG is signed 8-bit and Thalmic never published a microvolt
+    # scale for it, so `count` with lsb_per_unit 1 is the only true answer: these
+    # are uncalibrated ADC counts and any microvolt figure would be invented. The
+    # clause makes that visible instead of letting a plausible "uV" slide through.
+    t3 = {
+        "adc_bits": 8,
+        "unit": "count",
+        "lsb_per_unit": 1,
+        "akasara.note": "Myo raw sEMG; the vendor publishes no uV calibration, "
+                        "so no physical unit is claimed",
+    }
+    # T2 is this producer's own documented chain, not the Myo's internal one
+    # (which is undisclosed). 95 Hz rather than the usual 450 Hz upper corner
+    # because Nyquist at 200 Hz is 100 Hz — a chain that cannot exist at this
+    # sample rate must not be declared at it.
+    t2_filters = [
+        {"kind": "highpass", "hz": 20, "order": 4},
+        {"kind": "notch", "hz": 50, "q": 30},
+        {"kind": "lowpass", "hz": 95, "order": 4},
+    ]
+    # `count` is a T3-only answer (R-3.3.1): a filtered stream is no longer an
+    # integer count of anything, and with no uV calibration to convert to, "a.u."
+    # is what is left. The vocabulary having no `count` for T2 is what forces
+    # this to be said rather than carried over from the line above.
+    t2_unit = "a.u."
+
     EX_COUNTS = {1: 12, 2: 17, 3: 23}
     EX_OFFSET = {1: 0, 2: 12, 3: 29}
 
@@ -161,6 +189,24 @@ class PdEegSource:
     sample_rate_hz = 300.0
     full_scale = 1.0e9                 # dataset-native units; see class docstring
     mains_hz = 50.0
+
+    # R-3.3.1, and this is the interesting half of the clause: this source
+    # DECLARES NO T3. It cannot. T3 is "raw samples at ADC resolution", and this
+    # recording arrives as floats whose declared unit (microvolts) is wrong by
+    # six orders of magnitude and whose true unit and ADC width are both unknown.
+    # There is no honest `unit` and no honest `adc_bits`, so the badge is absent
+    # rather than filled with a number that would make the descriptor look more
+    # complete than the data is. The same producer declaring the badge on DB5 and
+    # refusing it here is the clause doing its job.
+    t3 = None
+    # T2 IS offerable: the chain below is applied by this producer and documented,
+    # and "a.u." is a true statement about a stream whose scale is unknown.
+    t2_filters = [
+        {"kind": "detrend"},
+        {"kind": "notch", "hz": 50, "q": 30},
+        {"kind": "bandpass", "hz_low": 1, "hz_high": 45, "order": 4},
+    ]
+    t2_unit = "a.u."
     EPOCH_USABLE_S = 4.0               # epochs are 5 s at 4 s spacing; the last
                                        # second overlaps the next round
 

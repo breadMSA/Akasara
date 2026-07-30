@@ -94,7 +94,93 @@ def build_frames(source, sessions, sample_rate_hz):
     return frames
 
 
+def apply_t2_chain(samples, sample_rate_hz, filters):
+    """Run the declared chain, in the declared order. §3's T2 is the stream
+    "after fixed, documented filtering", and the only way that phrase means
+    anything is if the exported samples are the output of exactly the stages the
+    descriptor lists — so this reads `filters` rather than hard-coding a chain,
+    and a descriptor edit changes the bytes.
+    """
+    from scipy import signal as sig
+
+    x = np.asarray(samples, dtype=np.float64)
+    nyq = sample_rate_hz / 2.0
+    for st in filters:
+        kind = st["kind"]
+        if kind == "none":
+            continue
+        if kind == "detrend":
+            x = sig.detrend(x, axis=0, type="linear")
+            continue
+        if kind == "car":
+            x = x - x.mean(axis=1, keepdims=True)
+            continue
+        if kind == "notch":
+            b, a = sig.iirnotch(st["hz"] / nyq, st["q"])
+            x = sig.filtfilt(b, a, x, axis=0)
+            continue
+        order = st.get("order", 4)
+        if kind in ("highpass", "lowpass"):
+            wn = st["hz"] / nyq
+            if not 0 < wn < 1:
+                raise SystemExit(
+                    f"R-3.3.1: declared {kind} at {st['hz']} Hz is not realisable "
+                    f"at {sample_rate_hz} Hz (Nyquist {nyq} Hz)")
+            b, a = sig.butter(order, wn, btype=kind)
+        elif kind in ("bandpass", "bandstop"):
+            wn = [st["hz_low"] / nyq, st["hz_high"] / nyq]
+            if not 0 < wn[0] < wn[1] < 1:
+                raise SystemExit(
+                    f"R-3.3.1: declared {kind} {st['hz_low']}-{st['hz_high']} Hz is "
+                    f"not realisable at {sample_rate_hz} Hz")
+            b, a = sig.butter(order, wn, btype=kind)
+        elif kind == "decimate":
+            raise SystemExit("decimate changes the rate and must be declared as a "
+                             "different t2.sample_rate_hz, not as a stage here")
+        else:
+            raise SystemExit(f"unknown t2 filter kind {kind!r}")
+        x = sig.filtfilt(b, a, x, axis=0)
+    return x
+
+
+def raw_tier_blocks(source):
+    """The `t2` / `t3` descriptor blocks, and the badges that go with them.
+
+    A source that cannot honestly describe its raw samples gets no badge. That is
+    the whole content of R-3.3.1 and it is decided here, once, from what the
+    source knows about itself — never from what would look complete.
+    """
+    badges, blocks = [], {}
+
+    filters = getattr(source, "t2_filters", None)
+    if filters:
+        badges.append("ase.t2")
+        blocks["t2"] = {
+            "channels": source.channels,
+            "sample_rate_hz": source.sample_rate_hz,
+            "unit": source.t2_unit,
+            # Rows are samples, columns are channels, so a row is one instant
+            # across the array: sample-major. The T1 vectors from the same source
+            # are feature-major, and the two facts are unrelated — which is why
+            # R-3.3.1 asks for this separately from R-5.4.1 rather than inferring.
+            "layout": "sample-major",
+            "filters": filters,
+        }
+
+    t3 = getattr(source, "t3", None)
+    if t3:
+        badges.append("ase.t3")
+        blocks["t3"] = {
+            "channels": source.channels,
+            "sample_rate_hz": source.sample_rate_hz,
+            "layout": "sample-major",
+            **t3,
+        }
+    return badges, blocks
+
+
 def build_capability(source, transport, margin=None):
+    raw_badges, raw_blocks = raw_tier_blocks(source)
     dim = source.dim
     expected = tdfeat.selftest_output(
         source.channels, source.sample_rate_hz, source.window_ms,
@@ -106,8 +192,9 @@ def build_capability(source, transport, margin=None):
         "firmware": PRODUCER_VERSION,
         "akasara.source": "replay",
         "akasara.dataset": source.citation,
-        "tiers": ["t1"],
-        "profiles": [],
+        "tiers": ["t1"] + (["t2"] if "ase.t2" in raw_badges else [])
+                        + (["t3"] if "ase.t3" in raw_badges else []),
+        "profiles": list(raw_badges),
         "signal": {
             "kind": source.kind,
             "channels": source.channels,
@@ -158,6 +245,7 @@ def build_capability(source, transport, margin=None):
             "url": DOC_URL,
         },
     }
+    cap.update(raw_blocks)
     if margin is not None:
         cap["t1"]["cross_user_margin"] = margin
     return cap
@@ -224,6 +312,9 @@ def main():
                     help="port serve.py will bind; goes in the transport descriptor")
     ap.add_argument("--transport-kbps", type=int, default=2000,
                     help="declared max_sustained_kbps for the loopback transport")
+    ap.add_argument("--no-raw-tiers", dest="raw_tiers", action="store_false",
+                    help="skip the T2/T3 files; the badges stay declared because "
+                         "they describe the device, not this invocation")
     args = ap.parse_args()
 
     src = BUILDERS[args.dataset](args.root, args.subject)
@@ -279,9 +370,48 @@ def main():
     with open(os.path.join(args.out, "selftest.json"), "w", encoding="utf-8") as fh:
         json.dump([round(float(v), 9) for v in actual], fh)
 
+    # ------------------------------------------------------ T2 / T3 (R-3.3)
+    #
+    # Written as float32 .npy per session plus one index. Not JSONL: a 16-channel
+    # 200 Hz session is 3200 numbers a second, and §10's own conclusion is that
+    # this tier belongs on a wide link and in a binary container. The index is
+    # what makes the files navigable without loading them.
+    raw_written = []
+    if args.raw_tiers and (cap.get("t2") or cap.get("t3")):
+        rawdir = os.path.join(args.out, "raw")
+        os.makedirs(rawdir, exist_ok=True)
+        index = {"ase_version": "0.1", "sessions": []}
+        for s in sess:
+            entry = {"session_id": s.session_id, "samples": int(len(s.samples))}
+            if cap.get("t3"):
+                # T3 is the recording as it arrived, at ADC scale — so the
+                # normalisation sources.py applies for T1 is UNDONE here. A T3
+                # stream carrying normalised floats would be a T2 mislabelled.
+                t3 = np.asarray(s.samples, dtype=np.float64) * src.full_scale
+                p = os.path.join(rawdir, f"{s.session_id}.t3.npy")
+                np.save(p, t3.astype(np.float32))
+                entry["t3"] = os.path.relpath(p, args.out).replace("\\", "/")
+            if cap.get("t2"):
+                t2 = apply_t2_chain(s.samples, src.sample_rate_hz,
+                                    cap["t2"]["filters"])
+                p = os.path.join(rawdir, f"{s.session_id}.t2.npy")
+                np.save(p, t2.astype(np.float32))
+                entry["t2"] = os.path.relpath(p, args.out).replace("\\", "/")
+            index["sessions"].append(entry)
+            raw_written.append(entry)
+        with open(os.path.join(rawdir, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump(index, fh, indent=2)
+
     cued = sum(1 for f in frames if "akasara.cue" in f)
     print(f"{args.out}: {len(frames)} T1 frames over {len(sess)} session(s), "
           f"dim {dim}, {cued} cue-labelled ({100*cued/max(1,len(frames)):.0f}%)")
+    tiers = ", ".join(cap["tiers"])
+    if raw_written:
+        n = sum(e["samples"] for e in raw_written)
+        print(f"  tiers {tiers}: {n} raw samples x {src.channels} ch written to raw/")
+    else:
+        print(f"  tiers {tiers}" + ("" if cap.get("t2") or cap.get("t3") else
+              " — no raw tier badge: this source cannot describe its samples honestly"))
 
 
 if __name__ == "__main__":

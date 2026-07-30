@@ -288,7 +288,7 @@ the reference frame, which is the territory R-9.1 governs.
 python test_replay.py --root <ninapro_db5 dir> --eeg-root <ds007822 dir>
 ```
 
-21 tests. Dataset tests skip without their roots; everything else runs anywhere.
+31 tests. Dataset tests skip without their roots; everything else runs anywhere.
 Included: the multi-session regression in both directions, the R-9.2 rounding
 rule pinned across both codecs, cross-language self-test agreement to under
 1e-12, an end-to-end WebSocket client with the §10.4 control plane, a check that
@@ -301,6 +301,38 @@ number anyway.
 - **A third producer nobody here wrote.** Two implementations by the same author
   is better than one, and is still not a vendor. The open question ASE cannot
   answer about itself is whether a firmware team reads §4 and §5 the same way.
-- **T0 and T2/T3 paths**, which no implementation exercises: T0 because the
-  spec's whole argument is that it is insufficient, T2/T3 because nothing here
-  exports raw.
+  `apps/brainflow` narrows this — it is a third implementation against somebody
+  else's acquisition API, on hardware the author does not own — but it is still
+  the same author, so the question stands.
+- ~~**T0 and T2/T3 paths**~~ **Done, 2026-07-30.** T0 in `apps/gate` (a hysteresis
+  recogniser over the exported vectors, so R-3.2.2's citation is real), T2/T3 here.
+  Implementing T0 found the fifth defect: `type = 0x02` had a header slot and a
+  BLE characteristic and **no payload definition anywhere** — R-5.4.1 one tier
+  down. Now R-9.5, and the two codecs agree byte-for-byte on it.
+
+## T2 / T3 — and the badge this producer refuses
+
+```
+python replay.py --root <db5> --subject s1 --out out/db5-s1        # writes raw/
+python replay.py --root <db5> --subject s1 --out out/db5-s1 --no-raw-tiers
+```
+
+R-3.3.1 says a declared badge must state what the numbers *are*. That splits the
+two datasets, and the split comes from the recordings rather than from the code:
+
+| | `ase.t2` | `ase.t3` | why |
+| --- | --- | --- | --- |
+| **Ninapro DB5** | yes, `a.u.` | **yes**, `count`, 8-bit, 1 LSB/count | The Myo streams signed 8-bit and Thalmic published no microvolt calibration, so `count` is the only true answer — a plausible `uV` would have been an invention. |
+| **ds007822 PD-EEG** | yes, `a.u.` | **no** | The BIDS sidecar says microvolts and the values run to ~1e9. There is no honest `unit` and no knowable `adc_bits`, so the badge is absent rather than filled in. |
+
+T2 is written as float32 `.npy` per session plus an index, not JSONL: §10's own
+conclusion is that this tier belongs on a wide link and in a binary container.
+The chain applied is read out of the descriptor, so a descriptor edit changes the
+bytes — and a stage that cannot exist at the sample rate (a 450 Hz lowpass on a
+200 Hz recording) is refused rather than silently clamped. T3 **undoes** the
+normalisation `sources.py` applies for T1, because a T3 stream carrying
+normalised floats is a T2 with the wrong label.
+
+Not yet run against the real datasets on this machine — the roots are not present
+here, so the raw-tier writer is covered by unit tests and by the descriptor
+checks, and the DB5/EEG `raw/` output is unmeasured.
