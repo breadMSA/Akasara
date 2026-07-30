@@ -29,8 +29,14 @@ not the requirement — read the clause before answering the row.
 | **inspection** | Testable by a third party with the device in hand, but not by the suite. |
 
 Rows marked **declaration** are the ones that carry your name rather than a
-green tick. Eighteen of the 43 answerable rows depend on one, wholly or in part,
+green tick. Nineteen of the 48 answerable rows depend on one, wholly or in part,
 and they are the honest centre of this form.
+
+## §0 — Relationship to ISO/IEC TS 27571:2026
+
+| Req | Status | What you are asserting | Checked by | Supported | Notes |
+| --- | --- | --- | --- | --- | --- |
+| R-0.1 | SHOULD | Where you export a **file** of a signal in TS 27571's scope, its metadata field names follow TS 27571 rather than parallel names for the same elements | declaration | | N/A if you export streams only |
 
 ## §3 — Export tiers
 
@@ -38,7 +44,10 @@ and they are the honest centre of this form.
 | --- | --- | --- | --- | --- | --- |
 | R-3.1 | MUST | T1 export exists; T1 is what Core conformance requires | suite | | |
 | R-3.2 | MUST | If the device emits recognised events, they are exposed as T0 *alongside* T1, never instead of it | inspection | | |
+| R-3.2.1 | MUST | Every T0 event carries `t_mono_ns`, `session_id`, its own `seq`, `event_space`, `code`; `event_space` changes on any recogniser change; `confidence` is a real posterior or is **omitted**, never 1.0 | suite | | |
+| R-3.2.2 | MUST | If the recogniser runs on the exported T1 frames, every event carries `t1_seq` — the frame it decided on — and `duration_ms`; if it does not, `t1_seq` is **absent** rather than approximated | suite | | |
 | R-3.3 | MAY | T2/T3, if offered, are declared as the `ase.t2` / `ase.t3` badges | suite | | |
+| R-3.3.1 | MUST | If a badge is declared: `t2` states channels, rate, SI `unit` with prefix, `layout`, and the ordered `filters` actually applied; `t3` states those plus `adc_bits` and `lsb_per_unit`. "Raw" and "filtered" are not descriptions | suite | | |
 
 ## §4 — Capability descriptor
 
@@ -111,6 +120,7 @@ about §7.*
 | R-9.2 | MUST | Unknown `type` values and trailer bits are skippable; a receiver never desynchronises | inspection | | |
 | R-9.3 | MUST | `.ase` readers verify per-record CRC-32 (ISO-HDLC) and reject failures; verify the trailer digest on full read; report a missing trailer as truncated | inspection | | writer-side only if you do not ship a reader |
 | R-9.4 | MUST | fixed-point `quality_q` and per-channel quality are produced by `floor(v x max + 0.5)` — half away from zero, not the half-to-even some languages default to | inspection | | byte-level; two conformant codecs disagreed here before the clause existed |
+| R-9.5 | MUST | If T0 events go out as ABF: `dim` is 0, `venc` is `0x00`, the fixed 16-byte payload layout is followed, only flag bits 2 and 3 may be set, and an event with no `confidence` uses JSON instead | suite | | N/A if you emit no T0 events, or emit them only as JSON |
 
 ## §10 — Transport bindings
 
@@ -142,19 +152,19 @@ about §7.*
 
 ## Summary
 
-All 48 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
+All 53 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
 one row for Appendix A.
 
 | | Count |
 | --- | --- |
-| **Rows you must answer** | **43** |
-| — decided outright by the suite | 14 |
+| **Rows you must answer** | **48** |
+| — decided outright by the suite | 18 |
 | — part suite, part declaration | 4 |
-| — your declaration alone | 14 |
+| — your declaration alone | 15 |
 | — third-party inspection, not the suite | 11 |
 | Informational rows, nothing to answer | 4 |
 
-Fourteen green ticks are not a conformance claim. Eighteen rows rest wholly or
+Eighteen green ticks are not a conformance claim. Nineteen rows rest wholly or
 partly on your signature, and that is by design — a specification that could
 mechanically verify a vendor's terms would be a specification that gated on the
 vendor's permission, which is the problem ASE exists to remove.

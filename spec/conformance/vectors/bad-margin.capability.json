@@ -62,6 +62,30 @@
       "ci_high": 0.184
     }
   },
+  "t0": {
+    "event_space": "example.band2.grip.v2",
+    "events": [
+      {
+        "code": 1,
+        "label": "rest"
+      },
+      {
+        "code": 2,
+        "label": "power_grip"
+      },
+      {
+        "code": 3,
+        "label": "pinch"
+      },
+      {
+        "code": 4,
+        "label": "wrist_extension"
+      }
+    ],
+    "derived_from_t1": true,
+    "confidence": true,
+    "documentation": "https://example.com/ase/grip-classifier-v2"
+  },
   "clock": {
     "rtc": false,
     "mono_epoch": "boot",

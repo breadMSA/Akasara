@@ -92,6 +92,81 @@
         }
       }
     },
+    "t0": {
+      "type": "object",
+      "required": ["event_space", "events", "documentation"],
+      "description": "R-3.2.1 — required when tiers[] includes t0",
+      "properties": {
+        "event_space": { "type": "string", "minLength": 3 },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "description": "the code -> label registry, sent once per session instead of per event",
+          "items": {
+            "type": "object",
+            "required": ["code", "label"],
+            "properties": {
+              "code": { "type": "integer", "minimum": 0, "maximum": 65535 },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "derived_from_t1": {
+          "type": "boolean",
+          "description": "R-3.2.2 — true when the recogniser runs on the exported feature space, in which case events carry t1_seq"
+        },
+        "confidence": {
+          "type": "boolean",
+          "default": true,
+          "description": "R-3.2.1 — false for a recogniser with no posterior; such a device cannot use the ABF encoding for events (R-9.5)"
+        },
+        "documentation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "t2": {
+      "type": "object",
+      "required": ["channels", "sample_rate_hz", "unit", "layout", "filters"],
+      "description": "R-3.3.1 — required when profiles[] includes ase.t2",
+      "properties": {
+        "channels": { "type": "integer", "minimum": 1 },
+        "sample_rate_hz": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "enum": ["uV", "mV", "V", "g", "m/s^2", "deg/s", "T", "fT", "a.u."] },
+        "layout": { "enum": ["channel-major", "sample-major"] },
+        "filters": {
+          "type": "array",
+          "description": "the fixed stages, in the order applied; an empty array is a claim that none are",
+          "items": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": { "enum": ["highpass", "lowpass", "bandpass", "bandstop", "notch", "decimate", "detrend", "car", "none"] },
+              "hz": { "type": "number", "exclusiveMinimum": 0 },
+              "hz_low": { "type": "number", "exclusiveMinimum": 0 },
+              "hz_high": { "type": "number", "exclusiveMinimum": 0 },
+              "order": { "type": "integer", "minimum": 1 },
+              "q": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "t3": {
+      "type": "object",
+      "required": ["channels", "sample_rate_hz", "unit", "layout", "adc_bits", "lsb_per_unit"],
+      "description": "R-3.3.1 — required when profiles[] includes ase.t3",
+      "properties": {
+        "channels": { "type": "integer", "minimum": 1 },
+        "sample_rate_hz": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "enum": ["uV", "mV", "V", "g", "m/s^2", "deg/s", "T", "fT", "count"] },
+        "layout": { "enum": ["channel-major", "sample-major"] },
+        "adc_bits": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "lsb_per_unit": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "ADC counts per one of unit; the number that makes 'count' interpretable"
+        }
+      }
+    },
     "clock": {
       "type": "object",
       "required": ["rtc", "mono_epoch"],

@@ -184,6 +184,105 @@ export function decodeT1(buf, channels) {
   return out;
 }
 
+/* ---- T0 events, §9.5 --------------------------------------------------- */
+
+export const T0_PAYLOAD_BYTES = 16;
+export const T1_SEQ_ABSENT = 0xffffffff;
+
+/**
+ * @param {object} ev  the JSON-shaped T0 event of R-3.2.1
+ * @param {object} opts { sessionOrd, scheduleOrd, itemOrd }
+ */
+export function encodeT0(ev, opts = {}) {
+  if (ev.confidence === undefined) {
+    // R-9.5: the field has no absent representation, so this event belongs in JSON.
+    throw new Error("R-9.5: a T0 event without confidence cannot use the ABF encoding");
+  }
+  if (ev.t1_seq !== undefined && ev.t1_seq >= T1_SEQ_ABSENT) {
+    throw new Error(`R-9.5: t1_seq ${ev.t1_seq} collides with the absent sentinel`);
+  }
+
+  let flags = 0;
+  if (ev.anchor) flags |= FLAG_ANCHOR;
+  if (ev.t_wall_ms !== undefined) flags |= FLAG_WALL;
+
+  let size = HEADER_BYTES + T0_PAYLOAD_BYTES;
+  if (flags & FLAG_ANCHOR) size += 20;
+  if (flags & FLAG_WALL) size += 8;
+
+  const buf = Buffer.alloc(size);
+  buf.writeUInt8(TYPE.T0, 0);
+  buf.writeUInt8(flags, 1);
+  buf.writeUInt8(VENC.f32, 2);            // R-9.5: venc MUST be 0x00
+  buf.writeUInt8(0, 3);
+  buf.writeUInt16LE(0, 4);                // R-9.5: dim MUST be 0
+  buf.writeUInt16LE(Math.round(Math.min(1, Math.max(0, ev.quality ?? 0)) * 65535), 6); // R-9.4
+  buf.writeUInt32LE(ev.seq, 8);
+  buf.writeUInt32LE(opts.sessionOrd ?? 0, 12);
+  buf.writeBigUInt64LE(BigInt(ev.t_mono_ns), 16);
+
+  let off = HEADER_BYTES;
+  buf.writeUInt16LE(ev.code, off); off += 2;
+  buf.writeUInt16LE(Math.round(Math.min(1, Math.max(0, ev.confidence)) * 65535), off); off += 2; // R-9.4
+  buf.writeUInt32LE(ev.t1_seq ?? T1_SEQ_ABSENT, off); off += 4;
+  buf.writeUInt32LE(Math.round(ev.duration_ms ?? 0), off); off += 4;
+  buf.writeUInt32LE(0, off); off += 4;    // reserved
+
+  if (flags & FLAG_ANCHOR) {
+    buf.writeUInt32LE(opts.scheduleOrd ?? 0, off); off += 4;
+    buf.writeUInt32LE(opts.itemOrd ?? 0, off); off += 4;
+    buf.writeBigUInt64LE(BigInt(ev.anchor.t_stim_mono_ns), off); off += 8;
+    buf.writeFloatLE(ev.anchor.timing_err_ms, off); off += 4;
+  }
+  if (flags & FLAG_WALL) { buf.writeBigUInt64LE(BigInt(ev.t_wall_ms), off); off += 8; }
+
+  if (off !== size) throw new Error(`internal: wrote ${off} of ${size} bytes`);
+  return buf;
+}
+
+export function decodeT0(buf) {
+  if (buf.length < HEADER_BYTES + T0_PAYLOAD_BYTES) throw new Error("short buffer");
+  const type = buf.readUInt8(0);
+  if (type !== TYPE.T0) throw new Error(`not a T0 event (type 0x${type.toString(16)})`);
+  if (buf.readUInt8(3) !== 0) throw new Error("reserved byte must be 0");
+
+  const flags = buf.readUInt8(1);
+  if (flags & (FLAG_QUALITY_CH | FLAG_ADAPT)) {
+    throw new Error("R-9.5: flag bits 0 and 1 MUST be 0 on a T0 message");
+  }
+  if (buf.readUInt8(2) !== VENC.f32) throw new Error("R-9.5: venc MUST be 0x00 on a T0 message");
+  if (buf.readUInt16LE(4) !== 0) throw new Error("R-9.5: dim MUST be 0 on a T0 message");
+  if (buf.readUInt32LE(HEADER_BYTES + 12) !== 0) throw new Error("R-9.5: reserved word must be 0");
+
+  const t1Seq = buf.readUInt32LE(HEADER_BYTES + 4);
+  const out = {
+    tier: "t0",
+    seq: buf.readUInt32LE(8),
+    session_ord: buf.readUInt32LE(12),
+    t_mono_ns: Number(buf.readBigUInt64LE(16)),
+    quality: buf.readUInt16LE(6) / 65535,
+    code: buf.readUInt16LE(HEADER_BYTES),
+    confidence: buf.readUInt16LE(HEADER_BYTES + 2) / 65535,
+    duration_ms: buf.readUInt32LE(HEADER_BYTES + 8),
+  };
+  if (t1Seq !== T1_SEQ_ABSENT) out.t1_seq = t1Seq;
+
+  let off = HEADER_BYTES + T0_PAYLOAD_BYTES;
+  if (flags & FLAG_ANCHOR) {
+    out.anchor = {
+      schedule_ord: buf.readUInt32LE(off),
+      item_ord: buf.readUInt32LE(off + 4),
+      t_stim_mono_ns: Number(buf.readBigUInt64LE(off + 8)),
+      timing_err_ms: buf.readFloatLE(off + 16),
+    };
+    off += 20;
+  }
+  if (flags & FLAG_WALL) { out.t_wall_ms = Number(buf.readBigUInt64LE(off)); off += 8; }
+
+  out._bytes = off;
+  return out;
+}
+
 /** Bytes on the wire for a given shape — used by the suite's R-4.4 check. */
 export function frameBytes({
   dim, venc = "f32", channels = 0,
@@ -249,6 +348,56 @@ function selftest() {
   const dn = decodeT1(encodeT1(noRtc, { venc: "f32" }), 0);
   check("absent t_wall_ms stays absent", dn.t_wall_ms === undefined);
   check("aggregate quality within 1/65535", Math.abs(dn.quality - 0.75) < 1 / 65535);
+
+  /* ---- T0, §9.5 ---- */
+
+  const ev = {
+    tier: "t0", t_mono_ns: 1234567890123, t_wall_ms: 1785000000000,
+    session_id: "s-1", seq: 7, event_space: "r.v1",
+    code: 300, confidence: 0.875, t1_seq: 412, duration_ms: 640, quality: 0.5,
+  };
+
+  const e0 = encodeT0(ev, { sessionOrd: 2 });
+  const d0 = decodeT0(e0);
+  check("T0 message is 24 + 16 bytes with no trailers",
+    encodeT0({ ...ev, t_wall_ms: undefined }).length === HEADER_BYTES + T0_PAYLOAD_BYTES,
+    `${encodeT0({ ...ev, t_wall_ms: undefined }).length} bytes`);
+  check("T0 all bytes consumed", d0._bytes === e0.length, `${d0._bytes} of ${e0.length}`);
+  check("T0 code / seq / duration survive exactly",
+    d0.code === 300 && d0.seq === 7 && d0.duration_ms === 640);
+  check("T0 confidence within 1/65535", Math.abs(d0.confidence - 0.875) < 1 / 65535);
+  check("T0 t1_seq survives", d0.t1_seq === 412);
+  check("T0 t_wall_ms survives", d0.t_wall_ms === 1785000000000);
+  check("T0 dim is 0 and venc is f32 on the wire",
+    e0.readUInt16LE(4) === 0 && e0.readUInt8(2) === VENC.f32);
+
+  // R-3.2.2: an undeclared derivation must decode as ABSENT, not as seq 0
+  const dAbs = decodeT0(encodeT0({ ...ev, t1_seq: undefined }));
+  check("R-3.2.2: absent t1_seq stays absent, not 0", dAbs.t1_seq === undefined);
+
+  // R-9.5: the two cases the encoding refuses rather than corrupts
+  let refusedNoConf = false;
+  try { encodeT0({ ...ev, confidence: undefined }); } catch { refusedNoConf = true; }
+  check("R-9.5: a T0 event with no confidence is refused, not encoded as 1.0", refusedNoConf);
+
+  let refusedSentinel = false;
+  try { encodeT0({ ...ev, t1_seq: T1_SEQ_ABSENT }); } catch { refusedSentinel = true; }
+  check("R-9.5: a real t1_seq equal to the sentinel is refused", refusedSentinel);
+
+  // R-9.2: a T1 decoder must not accept a T0 message, and vice versa
+  let t1RejectsT0 = false;
+  try { decodeT1(e0, 0); } catch { t1RejectsT0 = true; }
+  check("R-9.2: decodeT1 rejects a T0 message by type", t1RejectsT0);
+  let t0RejectsT1 = false;
+  try { decodeT0(f32); } catch { t0RejectsT1 = true; }
+  check("R-9.2: decodeT0 rejects a T1 frame by type", t0RejectsT1);
+
+  // R-9.5: bit0/bit1 are illegal on T0 — forge one and confirm it is caught
+  const forged = Buffer.from(encodeT0({ ...ev, t_wall_ms: undefined }));
+  forged.writeUInt8(FLAG_QUALITY_CH, 1);
+  let caughtFlag = false;
+  try { decodeT0(forged); } catch { caughtFlag = true; }
+  check("R-9.5: a per-channel-quality flag on a T0 message is rejected", caughtFlag);
 
   // bandwidth table in §10 must match the codec
   const kbps = (dim, hz, venc) => (frameBytes({ dim, venc }) * hz * 8) / 1000;

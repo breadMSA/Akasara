@@ -251,3 +251,52 @@ the EEG negative bounded:
   one game are forty repetitions of one state rather than forty distinct ones, so
   the task has a ceiling near its floor and could not have shown a pair effect
   where one existed.
+
+Seventh revision, 2026-07-30 — the tiers either side of T1 were described but
+never implemented, and implementing them found the fifth defect:
+
+- **R-9.5 added (T0 event payload).** `type = 0x02` was allocated in §9.2's
+  header table and given a BLE characteristic UUID in §10.1, while **its payload
+  was defined nowhere in the document.** R-3.2 could therefore be satisfied and
+  R-9.2 obeyed — a receiver could skip the message by its transport length
+  without desynchronising — by two vendors whose event streams were mutually
+  unreadable. This is R-5.4.1 one tier down, and it was found the same way: by
+  implementing the tier instead of describing it. The payload is now a fixed 16
+  bytes after the standard header, with `dim` 0 and `venc` `0x00`. The two
+  reference codecs agree byte-for-byte on it, which is the check that says the
+  table is implementable from the text alone.
+- **R-3.2.1 added (T0 event object).** Fields, an `event_space` identifier pinned
+  the way R-5.4 pins `feature_space`, a code registry in the descriptor rather
+  than a label per event, a T0 `seq` counter that is **not** shared with the T1
+  one, and the rule that a recogniser with no posterior **omits** `confidence`
+  rather than emitting 1.0.
+- **R-3.2.2 added (an event MUST name its evidence).** R-3.2 as written was
+  satisfiable by a T1 stream and, beside it, an event stream with no stated
+  relationship to it — two feeds a consumer has to take on faith line up. Where
+  the recogniser runs on the exported feature space, every event now carries
+  `t1_seq`: the frame it decided on. That one integer is what makes a T0 event
+  **falsifiable** — a host can hold the vector and check the decision against it
+  — and the suite verifies the citation resolves to a frame present in the
+  capture and ending no later than the event. Where the recogniser does not run on
+  exported frames, the field must be **absent** rather than approximated.
+- **R-3.3.1 added (T2/T3 must be self-describing).** "Raw" and "filtered" are not
+  descriptions. Every public dataset the reference implementations read had to be
+  told out of band whether its numbers were microvolts or millivolts and whether
+  a notch had already been applied, and getting either wrong changes an amplitude
+  feature by three orders of magnitude without failing anything. A declared badge
+  now costs a unit with its prefix, a layout, and — for T2 — the ordered list of
+  stages actually applied; T3 additionally costs `adc_bits` and `lsb_per_unit`.
+  The clause bites immediately and correctly: of the three producers, only the
+  Ninapro one can declare `ase.t3`, because the PD-EEG recording's unit is wrong
+  by six orders of magnitude and BrainFlow exposes no ADC scale at all. A badge
+  refused for a reason in the data is the clause working.
+- **§0.1 and R-0.1 added (ISO/IEC TS 27571:2026).** A real international
+  committee exists in this field — ISO/IEC JTC 1/SC 43, formed March 2022,
+  secretariat SAC — and published a non-invasive BCI data format TS in April
+  2026. The earlier draft's implicit claim that nobody was standardising here was
+  never verified and is false. The accurate statement is narrower and is now in
+  the document: the **rights layer** is unclaimed. TS 27571 is the sibling of §5,
+  not a competitor to §7, and where the two name the same element differently that
+  is a defect in this document.
+
+Requirement count: 48 -> 53.

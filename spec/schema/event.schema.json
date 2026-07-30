@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akasara.dev/spec/0.1/event.schema.json",
+  "title": "ASE-0.1 T0 recognised event",
+  "type": "object",
+  "required": ["tier", "t_mono_ns", "session_id", "seq", "event_space", "code"],
+  "additionalProperties": true,
+  "properties": {
+    "tier": { "const": "t0" },
+    "t_mono_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "R-5.2 applies unchanged: monotonic, epoch is boot or session start, never Unix"
+    },
+    "t_wall_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "R-3.2.1 — present if and only if clock.rtc is true"
+    },
+    "session_id": { "type": "string", "minLength": 1 },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "R-3.2.1 — the T0 counter, independent of the T1 counter; gaps stay visible as gaps"
+    },
+    "event_space": {
+      "type": "string",
+      "minLength": 3,
+      "description": "R-3.2.1 — pins the recogniser exactly as feature_space pins the transform; any recogniser change changes this"
+    },
+    "code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "R-3.2.1 — MUST appear in the descriptor's t0.events[]"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "R-3.2.1 — the recogniser's own posterior; omitted, not 1.0, when the recogniser has none"
+    },
+    "t1_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "R-3.2.2 — seq of the last exported T1 frame the recogniser consumed; ABSENT when the recogniser does not run on exported T1 frames"
+    },
+    "duration_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "R-3.2.2 — span the event covers; 0 for an instantaneous event"
+    },
+    "quality": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "aggregate contact quality of the window decided on; never the same number as confidence"
+    },
+    "anchor": {
+      "type": "object",
+      "description": "present only under profile akasara.align.v1",
+      "required": ["schedule_id", "item", "t_stim_mono_ns", "timing_err_ms"],
+      "properties": {
+        "schedule_id": { "type": "string" },
+        "item": { "type": "string" },
+        "t_stim_mono_ns": { "type": "integer" },
+        "timing_err_ms": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

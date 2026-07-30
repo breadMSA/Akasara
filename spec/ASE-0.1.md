@@ -26,6 +26,48 @@ The one-line summary of the whole document:
 
 Everything else here is the detail needed to make that testable.
 
+### 0.1 Relationship to ISO/IEC TS 27571:2026
+
+There is an international committee in this field — **ISO/IEC JTC 1/SC 43,
+Brain-computer interfaces**, formed March 2022 — and it has published
+**ISO/IEC TS 27571:2026, *BCI data format for non-invasive brain information
+collection*** (2026-04, developed in SC 43/WG 5). It covers basic data elements,
+technology-specific metadata, a modular file structure, and naming conventions,
+for EEG, MEG, fNIRS, and fMRI.
+
+**This document does not compete with it, and where they meet, it defers to it.**
+The layers are different, and stating the difference precisely is more useful
+than claiming novelty:
+
+| | TS 27571:2026 | ASE-0.1 |
+| --- | --- | --- |
+| Layer | how a recording is written down | what a device must let a user obtain, and under what terms |
+| Signals | brain only | signal-agnostic; the reference implementations run on sEMG, EEG, and IMU |
+| Consent / grant | out of scope | §7 in full, plus a reference consent gate |
+| Cross-user processing | out of scope | R-7.4 |
+| Transport / self-test / conformance suite | out of scope | §10, R-5.7, `conformance/check.mjs` |
+| Tier floor | out of scope | T1 mandatory (R-3.1), the load-bearing clause |
+
+**R-0.1 (alignment obligation).** Where an ASE-conformant device exports a
+recording of a signal within TS 27571's scope as a file rather than a stream, its
+metadata field names and naming convention SHOULD follow TS 27571 rather than
+inventing parallel names for the same elements. Where this document and TS 27571
+name the same element differently, that is a defect in this document and will be
+corrected in 0.2.
+
+> Non-normative, and a correction to an earlier draft's framing. The sentence
+> "nobody is standardising this" was never verified and is false. The accurate
+> statement is narrower: **the rights layer is unclaimed.** SC 43's published work
+> and its work items address format, reference architecture, ethics, and security
+> and privacy *requirements*; none of them obliges a vendor to provide an export
+> path at a stated fidelity, and none addresses whether two consenting people may
+> have their signals processed together. That is the gap this document is in, and
+> it is a gap next to a neighbour, not an empty field.
+>
+> The practical consequence is that a vendor implementing both should find them
+> stacking rather than conflicting: TS 27571 tells them how to write the file,
+> §7 tells them who is allowed to ask for it.
+
 ## 1. Why the tier matters (rationale, non-normative)
 
 Every body-signal device internally passes through the same stages:
@@ -129,8 +171,64 @@ capitals.
 **R-3.2** A device that emits recognised events MUST expose them as T0 alongside
 T1, never instead of it.
 
+**R-3.2.1 (T0 event object).** A T0 event MUST carry `t_mono_ns`, `session_id`,
+`seq`, `event_space`, `code`, and `confidence`. `t_wall_ms` MUST be present if
+and only if the device has an RTC. Schema: `schema/event.schema.json`.
+
+- `event_space` pins the recogniser exactly as `feature_space` pins the
+  transform in R-5.4: **any change to the recogniser — including a model update
+  the vendor considers an improvement — MUST change the identifier.**
+- `code` MUST appear in the descriptor's `t0.events[]`, which maps each code to
+  a human-readable label once per session rather than repeating it per event.
+- `confidence` MUST be in 0..1 and MUST be the recogniser's own posterior. A
+  device that does not produce one MUST omit the field rather than emit 1.0.
+- `seq` counts T0 events only. It MUST NOT be shared with, or derived from, the
+  T1 counter; R-5.3's rule that gaps stay visible as `seq` gaps applies to it
+  independently.
+
+**R-3.2.2 (an event MUST name its evidence).** Where a T0 event was derived from
+one or more T1 frames the device also exported in the same session, it MUST
+carry `t1_seq` — the `seq` of the last T1 frame the recogniser consumed before
+firing — and `duration_ms`, the span the event covers (0 for an instantaneous
+event). Where the recogniser does not run on exported T1 frames, `t1_seq` MUST
+be absent.
+
+> Non-normative, and this is the clause worth arguing about. R-3.2 as written
+> would be satisfied by a device that ships a T1 stream and, beside it, an event
+> stream with no stated relationship to it — two feeds that a consumer has to
+> take on faith line up. `t1_seq` is what makes a T0 event **falsifiable**: a
+> host can hold the vector the device says it decided on, and check the decision
+> against it. That is the difference between a vendor's claim and a measurement,
+> it is the thing a T0-only architecture structurally cannot offer, and it costs
+> a vendor one integer they already have in a register.
+>
+> The absence rule matters as much as the presence rule. A recogniser running on
+> an internal representation that is *not* the exported feature space must say so
+> by omitting the field, rather than attaching the nearest T1 `seq` and implying
+> a derivation that did not happen.
+
 **R-3.3** T2 and T3 are declared as the badges `ase.t2` / `ase.t3`. They are
 encouraged for research-grade devices and not expected of consumer ones.
+
+**R-3.3.1 (T2/T3 must be self-describing).** A device declaring `ase.t2` MUST
+populate `t2` with `channels`, `sample_rate_hz`, `unit`, `layout`, and `filters`
+— an ordered list of the fixed stages applied, each with `kind`, and the
+parameters that kind takes. A device declaring `ase.t3` MUST populate `t3` with
+`channels`, `sample_rate_hz`, `unit`, `layout`, `adc_bits`, and `lsb_per_unit`.
+`unit` MUST be an SI unit string with its prefix stated (`uV`, `mV`, `g`,
+`deg/s`); a bare `count` is permitted for T3 only, and only together with
+`lsb_per_unit`.
+
+> Non-normative: "raw" and "filtered" are not descriptions. Every public
+> biosignal dataset the reference implementations read had to be told, out of
+> band, whether its numbers were microvolts or millivolts and whether a notch
+> had already been applied — and getting either wrong changes an amplitude
+> feature by three orders of magnitude or removes a band the consumer intended
+> to keep, in both cases without failing anything. T2 and T3 are the tiers where
+> that mistake is available, because T1's `feature_space` identifier already
+> carries the answer implicitly. So the badges cost more to declare than they
+> look like they should: an undescribed T3 stream is not a research-grade
+> feature, it is a number of unknown scale.
 
 ## 4. Capability descriptor
 
@@ -661,6 +759,37 @@ receiving a lossy encoding cannot verify R-5.7 from the stream.
 > time of day, and a p95 roughly 2–3× the p50 in every cell. The **shape** —
 > uplink-bound, so payload width is the lever — is expected to travel. The
 > milliseconds are not.
+
+**R-9.5 (T0 event payload).** A `type = 0x02` message uses the same 24-byte
+header, with `dim` MUST be 0 and `venc` MUST be `0x00`, followed by a fixed
+16-byte payload:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 24 | 2 | `code` — the recognised event code, resolved via `t0.events[]` |
+| 26 | 2 | `confidence_q` — unsigned fixed point, 0 = 0.0, 65535 = 1.0, rounded per R-9.4 |
+| 28 | 4 | `t1_seq` — `seq` of the last T1 frame consumed; `0xFFFFFFFF` means absent per R-3.2.2 |
+| 32 | 4 | `duration_ms` |
+| 36 | 4 | reserved, MUST be 0 |
+
+`seq` in the header is the T0 counter of R-3.2.1; `quality_q` is the aggregate
+quality of the window the decision was made on, carried so a host can discount a
+low-quality decision without holding the T1 stream. Of the header flags, only
+bit2 (anchor) and bit3 (`t_wall_ms`) may be set on a T0 message; bit0 and bit1
+MUST be 0, and their trailers MUST NOT be present. A device that omits
+`confidence` per R-3.2.1 MUST NOT use the binary encoding for that event, since
+the field has no absent representation — the JSON encoding of §9.1 is the path
+for a recogniser with no posterior.
+
+> Non-normative: this clause exists because `0x02` was allocated in the header
+> table above and given a BLE characteristic in §10.1 while its payload was
+> defined nowhere. R-3.2 could therefore be satisfied, and R-9.2 obeyed — a
+> receiver could skip the message by its transport length without
+> desynchronising — by two vendors whose event streams were mutually unreadable.
+> It is the same defect as R-5.4.1 one tier down, found the same way: by
+> implementing the tier rather than describing it. `0xFFFFFFFF` rather than a
+> flag bit for absent `t1_seq` keeps the payload fixed-length, which is what lets
+> a receiver skip it without consulting the descriptor.
 
 **R-9.2** Unknown `type` values and unknown trailer bits MUST be skippable: a
 receiver that does not understand a message MUST be able to discard it using

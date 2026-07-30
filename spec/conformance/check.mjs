@@ -336,8 +336,13 @@ function checkCapability(cap) {
 function checkFrames(cap, allFrames, t1) {
   if (allFrames.length === 0) return fail("R-5.1", "no frames supplied");
 
-  const skipped = allFrames.length - allFrames.filter((f) => f.tier === "t1").length;
-  if (skipped > 0) warn("R-5.1", `${skipped} non-T1 frame(s) not examined by this check`);
+  // T0 records are examined by checkEvents(), so they are not "unexamined" any
+  // more; only a tier this suite genuinely does not read gets the warning.
+  const unread = allFrames.filter((f) => f.tier !== "t1" && f.tier !== "t0");
+  if (unread.length > 0) {
+    const kinds = [...new Set(unread.map((f) => String(f.tier)))].join(", ");
+    warn("R-5.1", `${unread.length} record(s) of tier ${kinds} not examined by this check`);
+  }
   const frames = allFrames.filter((f) => f.tier === "t1");
   if (frames.length === 0) {
     return fail("R-5.1", "capture contains no T1 frames; there is nothing for a third party to build on");
@@ -424,6 +429,220 @@ function checkFrames(cap, allFrames, t1) {
   if (cap.don_count === undefined) warn("R-6.2", "capability does not expose don_count");
 }
 
+// ---------------------------------------------------------------- §3 T0 events
+/**
+ * R-3.2 / R-3.2.1 / R-3.2.2. The interesting check is the last one: where the
+ * descriptor says the recogniser runs on the exported feature space, every event
+ * must name the T1 frame it decided on, and that frame must be in the capture.
+ * That is what makes a T0 event checkable against evidence rather than taken on
+ * faith — and it is decidable from the two files a vendor already ships.
+ */
+function checkEvents(cap, allFrames) {
+  const tiers = cap.tiers ?? [];
+  const events = allFrames.filter((f) => f.tier === "t0");
+  const t0 = cap.t0 ?? null;
+
+  if (!tiers.includes("t0")) {
+    if (events.length > 0) {
+      fail("R-3.2", `capture carries ${events.length} T0 event(s) but tiers[] does not include t0`);
+    }
+    return;
+  }
+
+  if (!t0) {
+    return fail("R-3.2.1", "tiers[] includes t0 but there is no t0 block describing the recogniser");
+  }
+  for (const field of ["event_space", "events", "documentation"]) {
+    if (t0[field] === undefined) fail("R-3.2.1", `t0.${field} missing`);
+  }
+  if (t0.producer === "model" || /model/i.test(String(t0.documentation))) {
+    if (!/[.:@\-_]v?\d/.test(String(t0.event_space))) {
+      warn("R-3.2.1", `event_space "${t0.event_space}" carries no version token; a recogniser update will silently change what the codes mean`);
+    }
+  }
+
+  const registry = new Map((t0.events ?? []).map((e) => [e.code, e.label]));
+  if (registry.size !== (t0.events ?? []).length) {
+    fail("R-3.2.1", "t0.events[] contains duplicate codes");
+  }
+
+  if (events.length === 0) {
+    // Not a failure: a session in which the recogniser fired nothing is a real
+    // session. It is a warning because the tier is then untested by this run.
+    return warn("R-3.2", `t0 declared with ${registry.size} registered code(s), but the capture contains no events — the tier is unexercised here`);
+  }
+
+  const t1Seqs = new Map();
+  for (const f of allFrames) {
+    if (f.tier === "t1") t1Seqs.set(`${f.session_id}#${f.seq}`, f);
+  }
+
+  const spaces = new Set();
+  const bySession = new Map();
+  let unregistered = 0, confBad = 0, seqOk = true, gaps = 0;
+  let derivMissing = 0, derivDangling = 0, derivLate = 0, derivClaimed = 0;
+  let wallMissing = false, wallInvented = false;
+  const hasRtc = cap.clock?.rtc;
+
+  events.forEach((e, i) => {
+    for (const field of ["t_mono_ns", "session_id", "seq", "event_space", "code"]) {
+      if (e[field] === undefined) fail("R-3.2.1", `event ${i}: required field ${field} missing`);
+    }
+    spaces.add(e.event_space);
+    if (!registry.has(e.code)) unregistered++;
+    if (e.confidence !== undefined && !(e.confidence >= 0 && e.confidence <= 1)) confBad++;
+    if (hasRtc === true && e.t_wall_ms === undefined) wallMissing = true;
+    if (hasRtc === false && e.t_wall_ms !== undefined) wallInvented = true;
+
+    // R-3.2.1 — the T0 counter is its own, per session, same rule as R-5.3.
+    const prev = bySession.get(e.session_id);
+    if (prev !== undefined) {
+      if (e.seq <= prev) seqOk = false;
+      if (e.seq > prev + 1) gaps++;
+    }
+    bySession.set(e.session_id, e.seq);
+
+    // R-3.2.2
+    if (t0.derived_from_t1 === true) {
+      if (e.t1_seq === undefined) { derivMissing++; return; }
+      derivClaimed++;
+      const src = t1Seqs.get(`${e.session_id}#${e.t1_seq}`);
+      if (!src) derivDangling++;
+      else if (src.t_mono_ns > e.t_mono_ns) derivLate++;
+    } else if (e.t1_seq !== undefined) {
+      derivClaimed++;
+    }
+  });
+
+  unregistered === 0
+    ? pass("R-3.2.1", `${events.length} event(s), every code in the t0.events[] registry`)
+    : fail("R-3.2.1", `${unregistered} event(s) carry a code absent from t0.events[]; the label is unresolvable`);
+  if (confBad) fail("R-3.2.1", `${confBad} event(s) carry confidence outside 0..1`);
+  if (t0.confidence !== false && events.some((e) => e.confidence === undefined)) {
+    fail("R-3.2.1", "t0.confidence is not declared false, but events omit confidence");
+  }
+  if (t0.confidence === false && events.some((e) => e.confidence === 1)) {
+    warn("R-3.2.1", "t0.confidence is false yet events carry confidence 1.0 — a recogniser with no posterior must omit the field, not saturate it");
+  }
+  seqOk ? pass("R-3.2.1", `T0 seq strictly increasing per session (${gaps} visible gap(s))`)
+        : fail("R-3.2.1", "T0 seq repeats or decreases within a session");
+  if (spaces.size === 1) pass("R-3.2.1", `single pinned event_space "${[...spaces][0]}"`);
+  else fail("R-3.2.1", `events mix ${spaces.size} event spaces (${[...spaces].join(", ")})`);
+  if (wallMissing) fail("R-3.2.1", "clock.rtc is true but events carry no t_wall_ms");
+  if (wallInvented) fail("R-3.2.1", "clock.rtc is false but events carry t_wall_ms");
+
+  if (t0.derived_from_t1 === true) {
+    if (derivMissing) {
+      fail("R-3.2.2", `t0.derived_from_t1 is true but ${derivMissing} event(s) carry no t1_seq; the decision names no evidence`);
+    } else if (derivDangling) {
+      fail("R-3.2.2", `${derivDangling} event(s) cite a t1_seq absent from this capture's T1 stream for the same session`);
+    } else if (derivLate) {
+      fail("R-3.2.2", `${derivLate} event(s) cite a T1 frame whose window ends AFTER the event fired — the recogniser cannot have consumed it`);
+    } else {
+      pass("R-3.2.2", `all ${derivClaimed} event(s) cite a T1 frame present in this capture and ending at or before the event`);
+    }
+  } else if (derivClaimed > 0) {
+    fail("R-3.2.2", `t0.derived_from_t1 is not true, yet ${derivClaimed} event(s) carry t1_seq — a derivation is implied that the descriptor denies`);
+  } else {
+    warn("R-3.2.2", "recogniser does not run on the exported feature space, so its decisions cannot be checked against the vectors — T0 here is a claim, not a measurement");
+  }
+
+  if (!tiers.includes("t1")) return; // R-3.1 already failed
+  pass("R-3.2", `T0 exported alongside T1, not instead of it (${events.length} event(s), ${allFrames.filter((f) => f.tier === "t1").length} frame(s))`);
+}
+
+// ---------------------------------------------------------------- §3 T2 / T3
+/**
+ * R-3.3.1. "Raw" and "filtered" are not descriptions; the suite refuses a badge
+ * that does not say what the numbers are in.
+ */
+function checkRawTiers(cap) {
+  const profiles = cap.profiles ?? [];
+  const tiers = cap.tiers ?? [];
+  const UNITS_T2 = ["uV", "mV", "V", "g", "m/s^2", "deg/s", "T", "fT", "a.u."];
+  const UNITS_T3 = ["uV", "mV", "V", "g", "m/s^2", "deg/s", "T", "fT", "count"];
+  const LAYOUTS = ["channel-major", "sample-major"];
+
+  for (const [tier, badge, block, required, units] of [
+    ["t2", "ase.t2", cap.t2, ["channels", "sample_rate_hz", "unit", "layout", "filters"], UNITS_T2],
+    ["t3", "ase.t3", cap.t3, ["channels", "sample_rate_hz", "unit", "layout", "adc_bits", "lsb_per_unit"], UNITS_T3],
+  ]) {
+    const declared = profiles.includes(badge) || tiers.includes(tier);
+    if (!declared) {
+      if (block) warn("R-3.3", `capability carries a ${tier} block but neither tiers[] nor the ${badge} badge declares it`);
+      continue;
+    }
+    if (!profiles.includes(badge)) {
+      fail("R-3.3", `tiers[] includes ${tier} but the ${badge} badge is not in profiles[]; the badge is how a host discovers it`);
+    }
+    if (!block) {
+      fail("R-3.3.1", `${badge} declared with no ${tier} block; an undescribed stream is a number of unknown scale`);
+      continue;
+    }
+    const missing = required.filter((f) => block[f] === undefined);
+    if (missing.length) {
+      fail("R-3.3.1", `${tier} missing ${missing.join(", ")}`);
+      continue;
+    }
+    if (!units.includes(block.unit)) {
+      fail("R-3.3.1", `${tier}.unit "${block.unit}" is not an SI unit with its prefix stated (${units.join(", ")})`);
+      continue;
+    }
+    if (!LAYOUTS.includes(block.layout)) {
+      fail("R-3.3.1", `${tier}.layout "${block.layout}" is not one of ${LAYOUTS.join(", ")}`);
+      continue;
+    }
+    if (tier === "t2") {
+      if (!Array.isArray(block.filters)) {
+        fail("R-3.3.1", "t2.filters must be an array; an empty array is the claim that no stage is applied");
+        continue;
+      }
+      const KINDS = ["highpass", "lowpass", "bandpass", "bandstop", "notch", "decimate", "detrend", "car", "none"];
+      const badKind = block.filters.find((f) => !KINDS.includes(f?.kind));
+      if (badKind) {
+        fail("R-3.3.1", `t2.filters contains kind "${badKind.kind}" outside the vocabulary`);
+        continue;
+      }
+      // A T2 stream is "after fixed, documented filtering" (§3). An empty chain
+      // makes it indistinguishable from T3 minus the ADC scale, which is a
+      // declaration error more often than it is a design.
+      if (block.filters.length === 0) {
+        warn("R-3.3.1", "t2.filters is empty: the stream is declared as filtered with no stage applied, which is T3 without the ADC scale");
+      }
+      const chain = block.filters.map((f) =>
+        f.kind === "bandpass" || f.kind === "bandstop" ? `${f.kind} ${f.hz_low}-${f.hz_high}Hz` :
+        f.hz !== undefined ? `${f.kind} ${f.hz}Hz` : f.kind).join(" -> ");
+      pass("R-3.3.1", `t2: ${block.channels}ch @ ${block.sample_rate_hz}Hz in ${block.unit}, ${block.layout}, chain [${chain || "none"}]`);
+    } else {
+      if (!(block.adc_bits >= 1 && block.adc_bits <= 32)) {
+        fail("R-3.3.1", `t3.adc_bits ${block.adc_bits} out of range`);
+        continue;
+      }
+      if (!(block.lsb_per_unit > 0)) {
+        fail("R-3.3.1", "t3.lsb_per_unit must be positive; it is the number that makes the samples interpretable");
+        continue;
+      }
+      if (block.unit === "count" && block.lsb_per_unit !== 1) {
+        warn("R-3.3.1", `t3.unit is "count" with lsb_per_unit ${block.lsb_per_unit}; counts per count should be 1, so state the physical unit instead`);
+      }
+      if (cap.signal?.sample_rate_hz && block.sample_rate_hz < cap.signal.sample_rate_hz) {
+        fail("R-3.3.1", `t3.sample_rate_hz ${block.sample_rate_hz} is below signal.sample_rate_hz ${cap.signal.sample_rate_hz}; T3 is the native rate by definition`);
+        continue;
+      }
+      pass("R-3.3.1", `t3: ${block.channels}ch @ ${block.sample_rate_hz}Hz, ${block.adc_bits}-bit, ${block.lsb_per_unit} LSB per ${block.unit}, ${block.layout}`);
+    }
+
+    // R-10.6 — the raw tiers must not be reachable on a weaker transport.
+    const weak = (cap.transport ?? []).filter((t) => {
+      const uri = typeof t === "string" ? t : t.uri ?? "";
+      return /^ble/i.test(uri);
+    });
+    if (weak.length && (cap.transport ?? []).length === weak.length) {
+      warn("R-10.6", `${badge} declared and BLE is the only transport; §10 puts T2/T3 on USB`);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- profiles §8
 function checkAlignProfile(cap, frames) {
   if (!(cap.profiles ?? []).includes("akasara.align.v1")) return;
@@ -460,7 +679,9 @@ if (argv[0] === "--compare") {
   const frames = loadFrames(framesPath);
   const actual = selftestPath ? JSON.parse(readFileSync(selftestPath, "utf8")) : null;
   const { t1 } = checkCapability(cap);
+  checkRawTiers(cap);
   checkFrames(cap, frames, t1);
+  checkEvents(cap, frames);
   checkSelftest(cap, actual);
   checkAlignProfile(cap, frames);
   console.log(`ASE-0.1 conformance — ${cap.vendor} ${cap.model} fw ${cap.firmware}\n`);
