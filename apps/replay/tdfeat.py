@@ -81,6 +81,47 @@ def bandpower_dim(channels, bands=BANDS):
     return len(bands) * channels
 
 
+EVOKED_TAIL_MS = 800
+EVOKED_STEP = 4
+
+
+def evoked(window, sample_rate_hz, tail_ms=EVOKED_TAIL_MS, step=EVOKED_STEP):
+    """window: (T, C) -> the last `tail_ms` of it, decimated by `step`,
+    laid out feature-major: all channels at the first retained instant, then
+    all channels at the next.
+
+    A third transform, and the least clever one in the file on purpose. It
+    computes nothing: it drops the head of the window and keeps every `step`-th
+    sample. It is here because measuring the two EEG spaces against each other
+    on THINGS-EEG2 showed the band-power vector carries about a third of the
+    cross-person transfer this one does (2.2x chance against 5.8x, over the same
+    people, cues and splits). R-11.5 asks whether a space beats its own
+    degenerate reduction; it does not ask whether the space was worth choosing,
+    and a producer can pass that badge comfortably while throwing most of the
+    signal away. Carrying both spaces is how that stays visible instead of
+    becoming a footnote.
+
+    No filtering and no baseline correction: doing either here would make this
+    the producer's opinion rather than the recording's samples, and §3's T2 is
+    where an opinion belongs.
+    """
+    x = np.asarray(window, dtype=np.float64)
+    if x.ndim != 2:
+        raise ValueError(f"window must be (T, C), got shape {x.shape}")
+    n_tail = int(round(tail_ms * sample_rate_hz / 1000))
+    if n_tail > x.shape[0]:
+        raise ValueError(
+            f"a {tail_ms} ms tail does not fit in a {x.shape[0]}-sample window "
+            f"at {sample_rate_hz} Hz")
+    return x[x.shape[0] - n_tail::step].reshape(-1)
+
+
+def evoked_dim(channels, sample_rate_hz, tail_ms=EVOKED_TAIL_MS,
+               step=EVOKED_STEP):
+    n_tail = int(round(tail_ms * sample_rate_hz / 1000))
+    return channels * len(range(0, n_tail, step))
+
+
 # --------------------------------------------------------------- ase.selftest.v1
 
 def _xorshift32(seed, n):

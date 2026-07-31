@@ -90,6 +90,10 @@ def build_frames(source, sessions, sample_rate_hz):
             if cue is not None:
                 frame["akasara.cue"] = cue
                 frame["akasara.cue_name"] = cue_name
+            # R-5.5: a source whose exported T1 carries per-user adaptation has
+            # to say which adaptation, on every frame. Frozen or not.
+            if getattr(source, "adaptive", False):
+                frame["adapt_state"] = source.adapt_state
             frames.append(frame)
     return frames
 
@@ -213,7 +217,7 @@ def build_capability(source, transport, margin=None):
             "window_ms": source.window_ms,
             "stride_ms": source.stride_ms,
             "producer": "dsp",
-            "adaptive": False,
+            "adaptive": bool(getattr(source, "adaptive", False)),
             "documentation": DOC_URL,
             # A replay has no acquisition path, so there is no acquisition
             # latency to report. What is reported is the transform's own cost,
@@ -245,6 +249,15 @@ def build_capability(source, transport, margin=None):
             "url": DOC_URL,
         },
     }
+    if cap["t1"]["adaptive"]:
+        # R-5.5.1. A replay cannot switch off an adaptation that was applied
+        # before the samples were published, so the honest descriptor states
+        # that the escape hatch does not exist and names what was fitted. The
+        # alternative -- declaring `adaptive: false` because the switch is
+        # somebody else's -- would pass the checker and be a lie.
+        cap["t1"]["non_adaptive_mode"] = False
+        cap["t1"]["adapt_scope"] = source.adapt_scope
+        cap["t1"]["adapt_fitted_on"] = source.adapt_fitted_on
     cap.update(raw_blocks)
     if margin is not None:
         cap["t1"]["cross_user_margin"] = margin
@@ -296,7 +309,43 @@ def pdeeg_source(root, subject):
     return src
 
 
-BUILDERS = {"db5": db5_source, "pdeeg": pdeeg_source}
+def thingseeg2_source(root, subject, space="bandpower"):
+    src = sources.ThingsEeg2Source(root, subject)
+    src.dataset = "things-eeg2"
+    src.citation = ("Gifford et al. 2022 (NeuroImage 119754), THINGS-EEG2 test "
+                    "partition, 10 subjects x 200 shared images x 80 repeats, "
+                    "17 ch at 100 Hz")
+    # Four recording sessions per participant in the original study; the
+    # preprocessed release does not carry which epoch came from which, so the
+    # only honest don count is the one the file supports.
+    src.don_count = 1
+    # The window IS the epoch: 1000 ms at 100 Hz is 100 samples, exactly the
+    # length of the released epoch, and the stride equals it so no window
+    # straddles two epochs. It is also the shortest window in which bandpower()
+    # will consent to report delta.
+    src.window_ms, src.stride_ms = 1000, 1000
+    if space == "bandpower":
+        src.transform = tdfeat.bandpower
+        src.dim = tdfeat.bandpower_dim(src.channels)
+        # R-5.4: a different channel count is a different transform output and
+        # so a different identifier, even though the arithmetic is ds007822's.
+        src.feature_space = f"akasara.replay.eeg{src.channels}.bandpower.v1"
+    elif space == "evoked":
+        # The same recording, a different T1. R-5.4 makes these two different
+        # identifiers and R-5.4.1 makes both layouts explicit; a consumer that
+        # holds captures in both spaces must refuse to fit a map across them,
+        # which is the behaviour align.py already has.
+        src.transform = tdfeat.evoked
+        src.dim = tdfeat.evoked_dim(src.channels, src.sample_rate_hz)
+        src.feature_space = (f"akasara.replay.eeg{src.channels}.evoked"
+                             f"{tdfeat.EVOKED_TAIL_MS}d{tdfeat.EVOKED_STEP}.v1")
+    else:
+        raise SystemExit(f"unknown feature space {space!r}")
+    return src
+
+
+BUILDERS = {"db5": db5_source, "pdeeg": pdeeg_source,
+            "thingseeg2": thingseeg2_source}
 
 
 def main():
@@ -305,6 +354,9 @@ def main():
     ap.add_argument("--subject", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--dataset", default="db5", choices=sorted(BUILDERS))
+    ap.add_argument("--space", default="bandpower",
+                    choices=["bandpower", "evoked"],
+                    help="thingseeg2 only: which T1 transform to export")
     ap.add_argument("--max-seconds", type=float, default=None,
                     help="truncate each session, for a small capture")
     ap.add_argument("--margin", help="path to a cross_user_margin.json from align.py")
@@ -317,7 +369,10 @@ def main():
                          "they describe the device, not this invocation")
     args = ap.parse_args()
 
-    src = BUILDERS[args.dataset](args.root, args.subject)
+    if args.dataset == "thingseeg2":
+        src = BUILDERS[args.dataset](args.root, args.subject, args.space)
+    else:
+        src = BUILDERS[args.dataset](args.root, args.subject)
     src.latency_typ_ms, src.latency_max_ms = measure_transform_latency(src)
 
     sess = src.sessions()

@@ -476,6 +476,40 @@ without declaring it. If adaptive normalisation is applied, the frame MUST carry
 `adapt_state` identifying the current adaptation, and the device MUST offer a
 mode in which exported T1 is non-adaptive.
 
+**R-5.5.1 (frozen adaptation).** Where the per-user adaptation was fitted once
+and the device genuinely cannot switch it off — because it was applied upstream
+of the values the device exports and the unadapted stream does not exist on the
+device — the device MUST declare all of:
+
+| field | value |
+| --- | --- |
+| `t1.adaptive` | `true` |
+| `t1.non_adaptive_mode` | `false` |
+| `t1.adapt_scope` | `"frozen"` |
+| `t1.adapt_fitted_on` | a plain-language statement of what was fitted, and on whose data |
+
+`adapt_state` MUST still be carried on every frame, and MUST NOT change within
+a `session_id`. A device whose adaptation can change while a session is open
+MUST NOT declare `frozen`; for it, R-5.5's non-adaptive mode remains the only
+conformant answer.
+
+> Non-normative: R-5.5 assumed the adaptation was the device's own and therefore
+> the device's to switch off. That assumption fails for everything downstream of
+> a fitted per-user step — an SDK exporting features computed after an enrollment
+> calibration, a recording republished after per-subject normalisation — and it
+> fails in the direction that punishes honesty. Declaring `adaptive: false`
+> because the switch belongs to somebody else passed the suite; declaring the
+> truth failed it, with no wording available that was both true and conformant.
+>
+> What a consumer loses is bounded, and naming it is the point of the extra
+> fields. Two users' vectors from a frozen-adaptive device are related by an
+> unknown per-user map even when `feature_space` matches, so a consumer that
+> assumes a shared frame — a fixed threshold, a template, a distance compared
+> across people — is wrong in a way nothing will flag. A consumer that fits a
+> map per user is not affected, which is why R-11.5's margin is still
+> answerable, and R-11.5's own warning about generic transferable structure
+> applies to it with more force rather than less.
+
 **R-5.6 (quality).** `quality` MUST be either a single 0..1 aggregate or an
 array of **exactly `signal.channels` values** in 0..1 — per channel, not per
 feature dimension. It MUST be produced by measurement, not by the classifier's
@@ -1080,6 +1114,34 @@ Three things this settles, and one it does not:
   [+0.006, +0.033]) for the full space, real but much smaller. A vendor could pass
   §11.5 on generic structure. That is a limit of what a *feature-space* floor can
   ever check, not a defect to be tuned away.
+- **And what it does not ask at all: whether the space was worth choosing.** The
+  criterion is relative to a space's own degenerate twin, so it is silent on how
+  much of the recording that space threw away before the comparison began. On
+  THINGS-EEG2 — 10 subjects, the same 200 images, 80 repetitions each, 100-way
+  retrieval, chance 0.010 — two T1 spaces over the *same* samples, people, cues
+  and splits:
+
+  | T1 space | full P@1 | channel-mean | margin | 95% CI |
+  | --- | --- | --- | --- | --- |
+  | log band power, 5 bands × 17 ch | 0.020 (2.0×) | 0.019 (1.9×) | +0.000 | [−0.001, +0.002] |
+  | the evoked window, 800 ms decimated ×4 | 0.069 (6.9×) | 0.029 (2.9×) | **+0.040** | [+0.036, +0.044] |
+
+  10/10 subjects positive on the second, 6/10 on the first; both collapse to 1.0×
+  chance with the cue correspondence permuted. A vendor exporting the first space
+  passes nothing and has done nothing wrong by this clause; a vendor exporting the
+  second clears it comfortably. The badge
+  cannot tell a consumer which of those two products they are holding. It was
+  never meant to, and a reader who takes a stated margin as a statement about the
+  device's ceiling is reading more than is there.
+
+  Two conditions on that second row, because they bound how far it generalises.
+  It computes nothing — it keeps every fourth sample of the window — so what is
+  shown is that a T1 preserving *time* resolution beats one trading all of it for
+  spectral resolution on a phase-locked response, not that a cleverer transform
+  beat a naive one. And the recording is epoched, so every window is exactly
+  stimulus-aligned; a device streaming continuously has arbitrary phase against
+  any stimulus, and a time-resolved space is the kind that loses most from that.
+  Read +0.040 as an upper bound obtained under perfect alignment.
 
 **Criterion, now normative at SHOULD level (was provisional and non-normative):**
 

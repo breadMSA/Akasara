@@ -300,3 +300,55 @@ never implemented, and implementing them found the fifth defect:
   is a defect in this document.
 
 Requirement count: 48 -> 53.
+
+Eighth revision, 2026-07-31 — a third dataset, and the first defect found by
+neither a reader nor a second implementation but by an acquisition path the
+document had not imagined:
+
+- **R-5.5.1 added (frozen adaptation).** R-5.5 required a device applying
+  per-user adaptation to declare it *and to offer a non-adaptive mode*. That
+  assumed the adaptation was the device's own and therefore the device's to
+  switch off. THINGS-EEG2 ships samples already whitened per participant, and
+  the un-whitened stream is not distributed, so its ASE producer's exported T1
+  is per-user adaptive with no switch to offer anywhere. The clause left exactly
+  two descriptors, and both were wrong: declaring `adaptive: false` — because
+  the whitening was somebody else's decision — **passed the suite and was a
+  lie**, and declaring the truth **failed R-5.5 for a reason no vendor could
+  fix**. A clause that passes evasion and fails honesty is backwards. Where the
+  adaptation was fitted upstream and is frozen, the descriptor now declares
+  `adapt_scope: "frozen"`, `non_adaptive_mode: false`, and `adapt_fitted_on`,
+  and `adapt_state` MUST NOT move within a session — which the suite checks.
+  This is not an exotic case: every SDK that exports features computed after an
+  enrollment calibration sits in it, and under R-5.5 alone all of them would
+  have declared `false`.
+- **The EEG negative is corrected, and the correction is the sharper result.**
+  The seventh revision recorded that the ds007822 capture publishes no
+  `cross_user_margin`, and blamed the *task*: forty rounds of one game are forty
+  repetitions of one state. That was right and incomplete. On THINGS-EEG2 the
+  task ceiling is gone — 10 people, the same **200** images, 80 repetitions
+  each, 100-way retrieval — and the same feature space still earns nothing:
+  **band power, margin +0.000, CI [−0.001, +0.002], 6/10 subjects positive.**
+  Exporting the evoked window itself instead, over the same people, cues,
+  splits and estimator: **+0.040, CI [+0.036, +0.044], 10/10 positive**, full
+  space 6.9x chance against the reduction's 2.9x, and both collapse to 1.0x
+  under the permutation control. So EEG *does* carry a cross-person margin. Part
+  of what the earlier negative measured was the transform, not the task and not
+  the modality — and §11.5's badge cannot see that difference, because it asks
+  whether a space beats its own degenerate reduction and never whether the space
+  was worth choosing. §11.5 is unchanged; that limit is now stated in it rather
+  than left to be discovered — together with the two conditions on the evoked
+  figure: it keeps every fourth sample rather than computing anything, and the
+  recording is epoched, so +0.040 is an upper bound obtained under stimulus
+  alignment a continuously streaming device does not have.
+- **A control, because the new margin is earned on adapted data.** Whitening
+  removes the common-mode covariance a channel-mean baseline lives on, so a
+  frozen per-user whitening could in principle manufacture an R-11.5 margin
+  rather than reveal one. Measured where both versions exist — Ninapro DB5, as
+  released and after the same per-subject whitening — it does the opposite:
+  the margin falls from **+0.162 [+0.153, +0.172] to +0.116 [+0.102, +0.130]**,
+  a paired change of **−0.046, CI [−0.055, −0.038], 0/6 subjects up**. The
+  THINGS-EEG2 margin is if anything understated by its preprocessing. This is a
+  different signal and a full-covariance whitening rather than MVNN's
+  noise-covariance one, so it bounds the direction, not the magnitude.
+
+Requirement count: 53 -> 54.

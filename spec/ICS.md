@@ -29,7 +29,7 @@ not the requirement — read the clause before answering the row.
 | **inspection** | Testable by a third party with the device in hand, but not by the suite. |
 
 Rows marked **declaration** are the ones that carry your name rather than a
-green tick. Nineteen of the 48 answerable rows depend on one, wholly or in part,
+green tick. Twenty of the 49 answerable rows depend on one, wholly or in part,
 and they are the honest centre of this form.
 
 ## §0 — Relationship to ISO/IEC TS 27571:2026
@@ -72,6 +72,7 @@ and they are the honest centre of this form.
 | R-5.4 | MUST | `feature_space` changes on **any** change to the producing transform, including an improvement you shipped in a firmware update | declaration | | |
 | R-5.4.1 | MUST | `t1.layout` is `feature-major`, `channel-major` or `opaque`; if not opaque, `dim` is a multiple of `signal.channels` | suite | | |
 | R-5.5 | MUST | No undeclared per-user adaptation of exported T1; if adaptive, `adapt_state` is carried and a non-adaptive mode exists | declaration | | |
+| R-5.5.1 | MUST | Where the adaptation was fitted upstream and cannot be switched off: `adapt_scope` `frozen`, `non_adaptive_mode` false, `adapt_fitted_on` stated, `adapt_state` constant within a session | suite (shape) / declaration (that it really is frozen) | | |
 | R-5.6 | MUST | `quality` is a measured 0..1 aggregate or exactly `signal.channels` values — never classifier confidence; per-kind definitions in Appendix A are normative | suite (shape) / declaration (provenance) | | |
 | R-5.7 | MUST | A self-test runs the **exact production transform** over `ase.selftest.v1` and the descriptor publishes `expected` + `tolerance` | suite | | |
 | R-5.7.1 | MUST | The published vector is the last analysis window ending at or before t = 2.000 s; no averaging, not the first window | declaration | | |
@@ -152,19 +153,19 @@ about §7.*
 
 ## Summary
 
-All 53 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
+All 54 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
 one row for Appendix A.
 
 | | Count |
 | --- | --- |
-| **Rows you must answer** | **48** |
+| **Rows you must answer** | **49** |
 | — decided outright by the suite | 18 |
-| — part suite, part declaration | 4 |
+| — part suite, part declaration | 5 |
 | — your declaration alone | 15 |
 | — third-party inspection, not the suite | 11 |
 | Informational rows, nothing to answer | 4 |
 
-Eighteen green ticks are not a conformance claim. Nineteen rows rest wholly or
+Eighteen green ticks are not a conformance claim. Twenty rows rest wholly or
 partly on your signature, and that is by design — a specification that could
 mechanically verify a vendor's terms would be a specification that gated on the
 vendor's permission, which is the problem ASE exists to remove.

@@ -282,6 +282,139 @@ class PdEegSource:
         return [Session(f"{self.subject}-{self.task}", samples, labels, names)]
 
 
+class ThingsEeg2Source:
+    """THINGS-EEG2 test partition -- 10 people, 17 posterior channels, 100 Hz.
+
+    Here because of what ds007822 could NOT do. Its cue was the round number,
+    and a round is not a state: across all 33 subjects only two categorical
+    states are genuinely shared, so a cross-person retrieval question with
+    eight or more alternatives cannot be asked of it at all. That is a property
+    of the recording, not of the code, and no estimator fixes it.
+
+    This dataset removes the ceiling by construction. All ten participants view
+    the SAME 200 test images, 80 repetitions each, so there are 200 shared cues,
+    consecutive cues are different states rather than the same state repeated,
+    and the correspondence between two people's cue k is the stimulus itself
+    rather than a shared clock.
+
+        200 image conditions x 80 repetitions x 17 channels x 100 time points,
+        epochs -0.2 .. 0.8 s around onset, resampled to 100 Hz.
+
+    THE ORDER IS THE DISTRIBUTION'S, NOT THE RECORDING'S. The preprocessed
+    release is indexed [condition][repetition] and does not carry acquisition
+    order, so no reordering here could restore it and none is attempted: the
+    stream is laid out condition-major and the descriptor says so. The analysis
+    window is exactly one epoch and the stride equals it, so no window ever
+    spans two epochs and no frame is an average of two different moments.
+
+    WHY THIS SOURCE DECLARES ITSELF ADAPTIVE. The released samples have been
+    multivariate-noise-normalised: a whitening matrix is estimated from each
+    participant's own recording and applied to that participant's data. That is
+    per-user adaptation, it reaches the exported T1 values, and R-5.5 says a
+    device must not apply it without declaring it. So it is declared -- and
+    declaring it truthfully is what exposed the hole in R-5.5, because the
+    clause also requires a non-adaptive mode and this producer has none to
+    offer: the un-whitened samples are not in the distribution. See R-5.5.1.
+    """
+
+    kind = "eeg"
+    channels = 17
+    sample_rate_hz = 100.0
+    # Dataset-native units. Whitening leaves the samples in units of estimated
+    # noise standard deviation, which is not a physical scale and not an
+    # acquisition full scale either; one constant is declared, applied to every
+    # subject identically, and chosen so that no subject clips. Deriving it per
+    # recording would have made the export doubly per-user adaptive.
+    full_scale = 128.0
+    mains_hz = 50.0                    # Berlin; at 100 Hz this sits AT Nyquist
+
+    # R-3.3.1 -- no badge, on both counts. T3 cannot be claimed: these are not
+    # raw samples at ADC resolution and neither the unit nor the ADC width
+    # survives the preprocessing. T2 cannot be claimed either, and that is the
+    # part worth stating: T2 is the stream "after fixed, documented filtering",
+    # and the filtering that produced these samples ends in a step that is not
+    # fixed across users. A whitened stream is not this producer's T2.
+    t3 = None
+    t2_filters = None
+
+    # R-5.5 / R-5.5.1. The adaptation is fitted once, off-line, by the dataset's
+    # own preprocessing and is then frozen for the life of the export, so
+    # `adapt_state` is constant per subject rather than per frame.
+    adaptive = True
+    adapt_scope = "frozen"
+    adapt_fitted_on = (
+        "multivariate noise normalisation (MVNN): a whitening matrix estimated "
+        "from this participant's own EEG, averaged over image conditions and "
+        "over both data partitions, applied to every epoch of that participant"
+    )
+
+    EPOCH_SAMPLES = 100
+
+    def __init__(self, root, subject, meta="image_metadata.npy"):
+        self.root = root
+        self.subject = subject
+        self.path = os.path.join(root, f"{subject}_test.npy")
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(self.path)
+        self.meta_path = os.path.join(root, meta)
+        self._d = None
+
+    def _load(self):
+        if self._d is None:
+            self._d = np.load(self.path, allow_pickle=True).item()
+        return self._d
+
+    @property
+    def adapt_state(self):
+        """R-5.5 wants the frame to identify WHICH adaptation produced it. One
+        whitening matrix per participant, so the identifier is the participant
+        and the fact that it never changes -- not a counter that would imply a
+        state this export does not have."""
+        return f"mvnn-frozen-{self.subject}"
+
+    def montage(self):
+        labels = [str(c) for c in self._load()["ch_names"]]
+        return {
+            "system": "ase.eeg.1020.v1",
+            "site": "scalp",
+            "side": "bilateral",
+            "arrangement": "scattered",
+            # Not "unknown" as a shrug: the preprocessed release genuinely does
+            # not carry it, and whitening mixes the channels anyway, so any
+            # reference named here would describe a stream that no longer exists.
+            "reference": "unknown (not carried by the preprocessed release)",
+            "positions": [{"ch": i, "label": lab} for i, lab in enumerate(labels)],
+            "akasara.note": "occipital and parietal subset retained by the "
+                            "dataset's preprocessing; the other 46 channels of "
+                            "the original cap are not in this release",
+        }
+
+    def _cue_names(self):
+        if not os.path.exists(self.meta_path):
+            return {}
+        m = np.load(self.meta_path, allow_pickle=True).item()
+        con = [str(c) for c in np.asarray(m["test_img_concepts"])]
+        return {i + 1: con[i].split("_", 1)[-1].replace("_", " ")
+                for i in range(len(con))}
+
+    def sessions(self):
+        x = np.asarray(self._load()["preprocessed_eeg_data"], dtype=np.float64)
+        n_cond, n_rep, n_ch, n_t = x.shape
+        if n_ch != self.channels or n_t != self.EPOCH_SAMPLES:
+            raise SystemExit(f"unexpected THINGS-EEG2 shape {x.shape}")
+        peak = float(np.abs(x).max())
+        if peak >= self.full_scale:
+            raise SystemExit(
+                f"{self.subject} peaks at {peak:.1f} in dataset units, at or "
+                f"above the declared full scale {self.full_scale} -- §5.7 wants "
+                "normalised samples inside +-1.0, and clipping them silently "
+                "would be exporting an opinion")
+        samples = (x.transpose(0, 1, 3, 2).reshape(-1, n_ch)) / self.full_scale
+        labels = np.repeat(np.arange(1, n_cond + 1), n_rep * n_t)
+        return [Session(f"{self.subject}-test", samples, labels,
+                        self._cue_names())]
+
+
 # canonical DB5 movement names in global-id order, used only as human-readable
 # labels on the vendor-extension cue field. Text from the Ninapro exercise
 # descriptions.

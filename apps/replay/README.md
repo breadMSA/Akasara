@@ -10,27 +10,28 @@ assertion nobody had tested. This is the test: a producer in a **different
 language**, on a **different modality**, written from the spec text rather than
 from the first implementation.
 
-It found one defect in the conformance suite and two in the specification text.
+It found one defect in the conformance suite and three in the specification text.
 That is the point.
 
 ## What it is
 
 `replay.py` turns a recorded dataset into a conformant ASE-0.1 T1 source:
 `capability.json`, `frames.jsonl`, `selftest.json`, and a live
-`ws://localhost` binding served by `serve.py`. Two datasets are wired up, and
+`ws://localhost` binding served by `serve.py`. Three datasets are wired up, and
 they are deliberately unalike:
 
-| | `--dataset db5` | `--dataset pdeeg` |
-| --- | --- | --- |
-| signal | 16-ch surface EMG, two Myo bands | 19-ch scalp EEG |
-| rate | 200 Hz | 300 Hz |
-| montage system | `ase.limb.v1` (geometry) | `ase.eeg.1020.v1` (labels) |
-| T1 transform | RMS + waveform length | log band power, 5 bands |
-| dim | 32 | 95 |
-| window / stride | 200 / 100 ms | 1000 / 500 ms |
-| cue | the shared movement | the shared round |
+| | `--dataset db5` | `--dataset pdeeg` | `--dataset thingseeg2` |
+| --- | --- | --- | --- |
+| signal | 16-ch surface EMG, two Myo bands | 19-ch scalp EEG | 17-ch scalp EEG, posterior only |
+| rate | 200 Hz | 300 Hz | 100 Hz |
+| montage system | `ase.limb.v1` (geometry) | `ase.eeg.1020.v1` (labels) | `ase.eeg.1020.v1` (labels) |
+| T1 transform | RMS + waveform length | log band power, 5 bands | band power, **or** the evoked window itself |
+| dim | 32 | 95 | 85 / 340 |
+| window / stride | 200 / 100 ms | 1000 / 500 ms | 1000 / 1000 ms |
+| cue | the shared movement | the shared round | the shared image, 200 of them |
+| adaptation | none | none | **frozen, per-user, upstream** |
 
-Nothing but the sample buffer is common to the two paths. That is the point:
+Nothing but the sample buffer is common to the three paths. That is the point:
 "signal-agnostic" had been tested on one signal.
 
 It is a replay and never pretends otherwise. The descriptor carries
@@ -46,9 +47,15 @@ which is what needed testing.
 Both, checked by the suite in `../../spec/conformance`:
 
 ```
-db5   s1          CONFORMANT — 21 pass, 0 fail, 0 warn
-pdeeg sub-G01S01  CONFORMANT — 19 pass, 0 fail, 0 warn
+db5        s1                 CONFORMANT — 22 pass, 0 fail, 0 warn
+pdeeg      sub-G01S01         CONFORMANT — 20 pass, 0 fail, 0 warn
+thingseeg2 sub-01 bandpower   CONFORMANT — 21 pass, 0 fail, 0 warn   (after R-5.5.1)
+thingseeg2 sub-01 evoked      CONFORMANT — 22 pass, 0 fail, 0 warn   (+ R-11.5 margin)
 ```
+
+The parenthesis on the third line is the whole story of the third dataset: on
+the spec as it stood, the only conformant descriptor available to it was a false
+one. See below.
 
 Zero warnings, where the browser gate has two permanent ones, and the reason is
 instructive: the gate's warnings are *"opaque montage"* and *"undeclared clock
@@ -110,15 +117,64 @@ The first two defects came from one implementation reading the spec. This one
 came from two of them being pointed at each other, which is a different and
 cheaper instrument than a third reader.
 
+**Four, in the spec: R-5.5 assumed the adaptation was yours to switch off.**
+R-5.5 says that if exported T1 carries per-user adaptation, the device must
+declare it, carry `adapt_state`, **and offer a non-adaptive mode**. THINGS-EEG2
+ships samples that have already been whitened per participant — a matrix fitted
+from that participant's own recording, applied to every epoch of it — and the
+un-whitened stream is not distributed. So this producer's exported T1 *is*
+per-user adaptive, and there is no switch anywhere for it to offer.
+
+That left exactly two descriptors, and both were bad. Declare `adaptive: false`,
+because the whitening was somebody else's decision: passes the suite, and is a
+lie about what a consumer is holding. Declare `adaptive: true` truthfully: fails
+R-5.5, for a reason the vendor cannot fix. A clause that fails honesty and
+passes evasion is backwards.
+
+**R-5.5.1** now covers the case: where the adaptation was fitted upstream and
+frozen, the descriptor declares `adapt_scope: "frozen"`, `non_adaptive_mode:
+false`, and `adapt_fitted_on` — a plain statement of what was fitted and on
+whose data — and `adapt_state` must not move within a session, which the suite
+checks. What a consumer loses is stated rather than hidden: two users' vectors
+from such a device are related by an unknown per-user map even when
+`feature_space` matches, so anything assuming a shared frame (a fixed threshold,
+a template, a distance compared across people) is wrong; anything fitting a map
+per user is not.
+
+This is the first defect found by neither reading nor cross-implementation, but
+by a *third dataset* whose acquisition path had a shape the spec had not
+imagined. It is also the one most likely to matter commercially: every SDK that
+exports features computed after an enrollment calibration is in exactly this
+position, and under R-5.5 alone all of them would have declared `false`.
+
+The self-serving reading is available and should be said out loud: the author of
+the spec changed the spec so that his own capture would pass. The test of
+whether that is what happened is whether the new clause lets anything through
+that R-5.5 was trying to stop, and it does the reverse. Before it, a vendor
+shipping enrollment-calibrated features could declare `adaptive: false` and
+point at the absence of any true alternative; R-5.5.1 removes that excuse and
+costs such a vendor three fields it did not have to write, one of them prose. It
+adds an obligation and withdraws none. What it does not do — and this is the
+part the clause cannot fix — is make a frozen-adaptive device as useful as a
+non-adaptive one. It only makes the difference legible.
+
 ## Producing
 
 ```
 python replay.py --root <ninapro_db5 dir> --subject s1 --out out/db5-s1
+python replay.py --dataset pdeeg --root <ds007822 dir> \
+    --subject sub-G01S01 --out out/pd-G01S01
+python replay.py --dataset thingseeg2 --root <things-eeg2 dir> \
+    --subject sub-01 --space evoked --out out/te2ev-sub-01
 node ../../spec/conformance/check.mjs \
     out/db5-s1/capability.json out/db5-s1/frames.jsonl out/db5-s1/selftest.json
 ```
 
-The dataset is not in this repository and will not be. `out/` is ignored.
+No dataset is in this repository and none will be. `out/` is ignored. The
+THINGS-EEG2 root is a directory of `sub-NN_test.npy` files taken from the
+preprocessed 17-channel release (OSF component `anp5v`) plus that project's
+`image_metadata.npy`, which supplies the 200 cue names; only the **test**
+partition is needed, about 209 MB of each subject's 1.07 GB archive.
 
 ## Serving — §10.3
 
@@ -214,6 +270,88 @@ The DB5 result is not affected by this: its permutation control does collapse,
 and a cross-group control does not apply because the shared movement is shared
 by everyone by construction.
 
+### The EEG negative, revisited on a task with headroom — and half of it was the transform
+
+The paragraph above blames the *task*: forty rounds of one game are forty
+repetitions of one state, so a 20-way retrieval over them has a ceiling near its
+floor. That was right, and it was incomplete.
+
+THINGS-EEG2 removes the ceiling by construction. Ten people view the **same 200
+images**, 80 repetitions each, so the cues are 200 genuinely different states and
+the correspondence between two people's cue *k* is the stimulus itself rather
+than a shared clock. Same estimator as everywhere else here: calibration-free
+A → B ridge map fitted on 100 cues, 100-way retrieval of the other 100, 20
+splits, aggregated to the subject, bootstrapped over subjects, chance 0.010.
+
+| T1 space | full P@1 | channel-mean | margin | 95% CI | subjects up |
+| --- | --- | --- | --- | --- | --- |
+| `eeg17.bandpower.v1` — log power, 5 bands | 0.020 (2.0x) | 0.019 (1.9x) | +0.000 | [−0.001, +0.002] | 6/10 |
+| `eeg17.evoked800d4.v1` — the window itself | 0.069 (6.9x) | 0.029 (2.9x) | **+0.040** | [+0.036, +0.044] | **10/10** |
+| bandpower, cue correspondence permuted | 0.010 (1.0x) | 0.010 (1.0x) | −0.000 | [−0.001, +0.000] | 4/10 |
+| evoked, cue correspondence permuted | 0.010 (1.0x) | 0.010 (1.0x) | −0.000 | [−0.001, +0.000] | 4/10 |
+
+Both controls sit flat on chance, so the second row is transfer and not an
+artefact of the estimator.
+
+So EEG does carry a cross-person margin, and the earlier negative was measuring
+the transform as well as the task. Band power earns nothing here even with 200
+distinct states to separate; the evoked time course earns +0.040 with every
+subject positive. **The `thingseeg2 --space evoked` captures therefore publish a
+`cross_user_margin`, and the band-power captures still publish none** — the same
+rule applied to a different answer.
+
+**Two things about that second row that a hostile reader will find first, so
+they are here.**
+
+*It is barely a feature space.* `evoked800d4` computes nothing — it drops the
+first 200 ms of the window and keeps every fourth sample. At a 1 Hz stride that
+is close to shipping T2 at 25 Hz and calling it T1. The honest reading of the
+result is therefore narrower than "the evoked space is better": it is *a T1 that
+preserves time resolution beats a T1 that trades all of it for spectral
+resolution, on a phase-locked visual response.* That is still worth knowing, and
+it is still a legitimate T1 under R-5.4 — nothing in §5 requires a transform to
+be lossy — but it is not a clever transform beating a naive one.
+
+*The stimulus locking is the dataset's, not the device's.* Every window here is
+exactly one epoch because the release is epoched, so the 800 ms tail is
+guaranteed to be the post-stimulus interval. A device streaming continuously at
+a 1 s stride would have arbitrary phase against any stimulus, and a
+time-resolved space is exactly the kind that loses most from that. This margin
+is measured under perfect stimulus alignment and should be read as an upper
+bound for one. It is also why these captures do **not** declare
+`akasara.align.v1`: R-8 wants stimulus lock within 10 ms as a property of the
+*device*, and here it is a property of somebody's preprocessing.
+
+Why the band-power space loses so much is worth stating precisely, because it is
+not "band power is bad". The ASE path computes log power **per epoch** and the
+consumer averages the resulting vectors; averaging in the feature domain keeps
+induced power and discards phase locking, and the visual evoked response is
+phase-locked. Doing it the other way round — average the epochs first, then take
+band power, which is what an off-line analysis usually does — recovers part of
+it (2.5x chance rather than 2.0x, margin +0.0029, CI [+0.0015, +0.0043]). The order
+of averaging is not a detail here, and nothing in the descriptor records it,
+because it happens in the consumer.
+
+### The margin is earned on adapted data, so it was controlled for
+
+THINGS-EEG2's samples are whitened per participant (R-5.5.1 above). Whitening
+removes the common-mode covariance that a channel-mean baseline lives on, so it
+could in principle manufacture an R-11.5 margin instead of revealing one. That
+cannot be tested on this dataset — the un-whitened stream is not distributed —
+so it was tested where both versions exist. Ninapro DB5, as released, and again
+after the same kind of per-subject whitening fitted once and frozen:
+
+| | full P@1 | channel-mean | margin | 95% CI |
+| --- | --- | --- | --- | --- |
+| as released | 0.224 | 0.062 | +0.162 | [+0.153, +0.172] |
+| per-subject whitened | 0.166 | 0.050 | +0.116 | [+0.102, +0.130] |
+
+Paired over subjects, whitening **costs** −0.046 of margin, CI [−0.055, −0.038],
+0/6 subjects up. It suppresses the margin rather than inventing one, so the EEG
+figure above is if anything understated by its own preprocessing. Different
+signal and a full-covariance whitening rather than MVNN's noise-covariance one:
+this bounds the direction, not the size.
+
 ### The layout the descriptor does not state
 
 R-5.4 pins a feature space by id, and the order of `values[]` is part of what is
@@ -272,6 +410,23 @@ the same pair, and the interval is over the per-subject difference.
 - **A cue-labelled window is only 35–39% of a DB5 capture.** The rest is rest and
   transitions. A window straddling a cue boundary is left unlabelled rather than
   assigned to whichever cue covers more of it.
+- **On THINGS-EEG2 the `quality` proxy is empty, and says nothing false.** The
+  release is 100 Hz, so the 50 Hz mains sits exactly at Nyquist: it has aliased
+  somewhere unknowable and `quality.py` refuses to report a line share rather
+  than inventing one. Whitened samples do not rail either. Every channel
+  therefore reports 1.0, which is honest — "nothing visible is broken" — and
+  carries no information. Appendix A's proxy has nothing to work with on a
+  stream that arrives already preprocessed and downsampled; a device would
+  measure impedance and would not be in this position.
+- **The THINGS-EEG2 epoch order is the distribution's, not the recording's.**
+  The preprocessed release is indexed `[condition][repetition]` and does not
+  carry acquisition order, so the replayed stream is laid out condition-major.
+  No reordering could restore the real order and none is attempted. The analysis
+  window is exactly one epoch and the stride equals it, so no frame is ever an
+  average of two different moments.
+- **Its `don_count` is 1, and the original study had four sessions.** The
+  release does not say which epoch came from which session, so 1 is the only
+  number the file supports. It understates the donning variation in the data.
 
 ## ABF — §9.2 in a second language
 
@@ -285,11 +440,12 @@ the reference frame, which is the territory R-9.1 governs.
 ## Tests
 
 ```
-python test_replay.py --root <ninapro_db5 dir> --eeg-root <ds007822 dir>
+python test_replay.py --root <ninapro_db5 dir> --eeg-root <ds007822 dir> \
+                      --te2-root <things-eeg2 dir>
 ```
 
-36 tests with both roots, 31 without — the dataset suites skip when their root is
-absent, and everything else runs anywhere.
+46 tests with all three roots, 36 without — the dataset suites skip when their
+root is absent, and everything else runs anywhere.
 Included: the multi-session regression in both directions, the R-9.2 rounding
 rule pinned across both codecs, cross-language self-test agreement to under
 1e-12, an end-to-end WebSocket client with the §10.4 control plane, a check that
@@ -325,6 +481,7 @@ two datasets, and the split comes from the recordings rather than from the code:
 | --- | --- | --- | --- |
 | **Ninapro DB5** | yes, `a.u.` | **yes**, `count`, 8-bit, 1 LSB/count | The Myo streams signed 8-bit and Thalmic published no microvolt calibration, so `count` is the only true answer — a plausible `uV` would have been an invention. |
 | **ds007822 PD-EEG** | yes, `a.u.` | **no** | The BIDS sidecar says microvolts and the values run to ~1e9. There is no honest `unit` and no knowable `adc_bits`, so the badge is absent rather than filled in. |
+| **THINGS-EEG2** | **no** | **no** | No T3 for the same reason as the row above, and no T2 either — which is the part worth noticing. T2 is the stream "after fixed, documented filtering", and the last stage that produced these samples is fitted per participant. A whitened stream is not this producer's T2, so it claims neither badge and exports `tiers: ["t1"]` alone. |
 
 T2 is written as float32 `.npy` per session plus an index, not JSONL: §10's own
 conclusion is that this tier belongs on a wide link and in a binary container.

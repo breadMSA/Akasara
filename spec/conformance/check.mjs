@@ -283,7 +283,24 @@ function checkCapability(cap) {
     }
 
     if (t1.adaptive === true && t1.non_adaptive_mode !== true) {
-      fail("R-5.5", "exported T1 is per-user adaptive with no non-adaptive mode offered");
+      // R-5.5.1 — an adaptation fitted upstream and frozen has no switch to
+      // offer. That is conformant only if the descriptor says so in full;
+      // otherwise "no non-adaptive mode" is indistinguishable from "we did not
+      // build one", which is the case R-5.5 was written against.
+      if (t1.adapt_scope === "frozen") {
+        const missing = ["adapt_fitted_on"].filter((f) => t1[f] === undefined);
+        if (t1.non_adaptive_mode !== false) {
+          fail("R-5.5.1", "adapt_scope is frozen but non_adaptive_mode is not declared false");
+        } else if (missing.length) {
+          fail("R-5.5.1", `adapt_scope is frozen but omits ${missing.join(", ")} — a frozen adaptation a consumer cannot read about is an undeclared one`);
+        } else {
+          pass("R-5.5.1", "per-user adaptation declared frozen upstream, with no non-adaptive mode and what was fitted stated");
+        }
+      } else {
+        fail("R-5.5", "exported T1 is per-user adaptive with no non-adaptive mode offered");
+      }
+    } else if (t1.adapt_scope !== undefined) {
+      fail("R-5.5.1", "adapt_scope is declared on a device that is not adaptive without a non-adaptive mode");
     }
 
     // R-11.5 — the margin itself is measured on the vendor's own data, which the
@@ -356,6 +373,8 @@ function checkFrames(cap, allFrames, t1) {
   const sessions = new Map();
   let monoOk = true, seqOk = true, dimOk = true, qualityOk = true, finiteOk = true;
   let adaptMissing = false, wallMissing = false, wallInvented = false, monoRange = true;
+  const adaptSeen = new Map();
+  let adaptDrifted = false;
   let qualityLenOk = true;
   let gaps = 0;
 
@@ -380,6 +399,11 @@ function checkFrames(cap, allFrames, t1) {
     if (Array.isArray(q) && channels !== undefined && q.length !== channels) qualityLenOk = false;
 
     if (t1?.adaptive === true && f.adapt_state === undefined) adaptMissing = true;
+    if (f.adapt_state !== undefined) {
+      const was = adaptSeen.get(f.session_id);
+      if (was === undefined) adaptSeen.set(f.session_id, f.adapt_state);
+      else if (was !== f.adapt_state) adaptDrifted = true;
+    }
 
     // R-5.2 monotonicity is per SESSION, not per capture. R-4.3 lets the epoch
     // be session start, so a capture holding several sessions restarts
@@ -413,6 +437,11 @@ function checkFrames(cap, allFrames, t1) {
   seqOk ? pass("R-5.3", `seq strictly increasing per session (${gaps} visible gap(s))`)
         : fail("R-5.3", "seq repeats or decreases within a session — reordering or renumbering");
   if (adaptMissing) fail("R-5.5", "adaptive T1 declared but frames carry no adapt_state");
+  if (t1?.adapt_scope === "frozen") {
+    adaptDrifted
+      ? fail("R-5.5.1", "adapt_scope is frozen but adapt_state changes within a session — a frozen adaptation is one that does not move while a session is open")
+      : pass("R-5.5.1", `adapt_state constant within each of ${adaptSeen.size} session(s)`);
+  }
 
   if (spaces.size === 1) {
     const [only] = [...spaces];

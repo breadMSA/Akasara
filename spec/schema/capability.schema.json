@@ -66,6 +66,15 @@
         "producer": { "enum": ["dsp", "model"] },
         "adaptive": { "type": "boolean", "default": false },
         "non_adaptive_mode": { "type": "boolean" },
+        "adapt_scope": {
+          "enum": ["frozen"],
+          "description": "R-5.5.1 — present only when the per-user adaptation was fitted once, upstream of the exported values, and cannot be switched off. Requires non_adaptive_mode false and adapt_fitted_on."
+        },
+        "adapt_fitted_on": {
+          "type": "string",
+          "minLength": 10,
+          "description": "R-5.5.1 — what was fitted, and on whose data."
+        },
         "documentation": { "type": "string", "minLength": 1 },
         "latency_typ_ms": { "type": "number" },
         "latency_max_ms": { "type": "number" },

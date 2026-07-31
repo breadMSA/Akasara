@@ -493,13 +493,91 @@ def _raw_cap(**over):
     return cap
 
 
-def _check_cap(cap):
+def _check_cap(cap, frames=None):
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "capability.json")
         with open(p, "w", encoding="utf-8") as fh:
             json.dump(cap, fh)
-        return check(p, os.path.join(VECTORS, "good.frames.jsonl"),
-                     os.path.join(VECTORS, "good.selftest-output.json"))
+        fp = os.path.join(VECTORS, "good.frames.jsonl")
+        if frames is not None:
+            fp = os.path.join(tmp, "frames.jsonl")
+            with open(fp, "w", encoding="utf-8") as fh:
+                for f in frames:
+                    fh.write(json.dumps(f) + "\n")
+        return check(p, fp, os.path.join(VECTORS, "good.selftest-output.json"))
+
+
+def _good_frames(**over):
+    out = []
+    with open(os.path.join(VECTORS, "good.frames.jsonl"), encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                out.append({**json.loads(line), **over})
+    return out
+
+
+# ------------------------------------------------- §5.5.1 frozen adaptation
+#
+# Found by a producer that could not lie: THINGS-EEG2 ships samples that have
+# already been whitened per participant, so its exported T1 is per-user adaptive
+# and there is no un-whitened stream to switch back to. Under R-5.5 alone the
+# only conformant descriptor for it was a false one.
+
+@test("R-5.5: adaptive T1 with no non-adaptive mode and no frozen scope still fails")
+def _():
+    cap = _raw_cap()
+    cap["t1"] = {**cap["t1"], "adaptive": True}
+    code, out = _check_cap(cap, _good_frames(adapt_state="u7"))
+    assert code == 1 and "FAIL  R-5.5" in out, out
+
+
+@test("R-5.5.1: a frozen adaptation that does not say what was fitted is not conformant")
+def _():
+    cap = _raw_cap()
+    cap["t1"] = {**cap["t1"], "adaptive": True, "non_adaptive_mode": False,
+                 "adapt_scope": "frozen"}
+    code, out = _check_cap(cap, _good_frames(adapt_state="u7"))
+    assert code == 1 and "FAIL  R-5.5.1" in out, out
+    assert "adapt_fitted_on" in out, out
+
+
+@test("R-5.5.1: a fully declared frozen adaptation passes")
+def _():
+    cap = _raw_cap()
+    cap["t1"] = {**cap["t1"], "adaptive": True, "non_adaptive_mode": False,
+                 "adapt_scope": "frozen",
+                 "adapt_fitted_on": "whitening estimated from this user's own "
+                                    "enrollment recording"}
+    code, out = _check_cap(cap, _good_frames(adapt_state="u7"))
+    assert code == 0, out
+    assert "PASS  R-5.5.1" in out, out
+
+
+@test("R-5.5.1: frozen means frozen — adapt_state moving inside a session fails")
+def _():
+    cap = _raw_cap()
+    cap["t1"] = {**cap["t1"], "adaptive": True, "non_adaptive_mode": False,
+                 "adapt_scope": "frozen",
+                 "adapt_fitted_on": "whitening estimated from this user's own "
+                                    "enrollment recording"}
+    frames = _good_frames(adapt_state="u7")
+    last = frames[-1]["session_id"]
+    same = [f for f in frames if f["session_id"] == last]
+    assert len(same) >= 2, "fixture assumption: a session with two frames in it"
+    frames[-1]["adapt_state"] = "u7-recentred"
+    code, out = _check_cap(cap, frames)
+    assert code == 1 and "FAIL  R-5.5.1" in out, out
+
+
+@test("R-5.5.1: the frozen escape is not available to a device that has a switch")
+def _():
+    cap = _raw_cap()
+    cap["t1"] = {**cap["t1"], "adapt_scope": "frozen"}
+    code, out = _check_cap(cap)
+    assert code == 1 and "FAIL  R-5.5.1" in out, out
+
+
+# ------------------------------------------------------ §3 T2 / T3, continued
 
 
 @test("R-3.3.1: a declared t3 badge with no unit or ADC width is not conformant")
@@ -679,6 +757,71 @@ def eeg_tests(root):
             raise AssertionError("a 60-sample window claimed to resolve the delta band")
 
 
+def thingseeg2_tests(root):
+    @test("THINGS-EEG2: a CONFORMANT capture that has to declare itself adaptive")
+    def _():
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "te2")
+            subprocess.run([sys.executable, os.path.join(HERE, "replay.py"),
+                            "--dataset", "thingseeg2", "--root", root,
+                            "--subject", "sub-01", "--out", out,
+                            "--max-seconds", "800"],
+                           check=True, capture_output=True, encoding="utf-8",
+                           errors="replace", cwd=HERE)
+            code, log = check(os.path.join(out, "capability.json"),
+                              os.path.join(out, "frames.jsonl"),
+                              os.path.join(out, "selftest.json"))
+            assert code == 0, log
+            assert "WARN" not in log, "unexpected warning: " + log
+            assert "PASS  R-5.5.1" in log, log
+            cap = json.load(open(os.path.join(out, "capability.json"),
+                                 encoding="utf-8"))
+            t1 = cap["t1"]
+            assert t1["adaptive"] is True and t1["non_adaptive_mode"] is False
+            assert t1["adapt_scope"] == "frozen" and t1["adapt_fitted_on"]
+            # R-3.3.1 both ways: a whitened stream is neither this producer's
+            # T2 nor anybody's T3, so neither badge is claimed.
+            assert cap["profiles"] == [], cap["profiles"]
+            assert cap["tiers"] == ["t1"], cap["tiers"]
+
+    @test("THINGS-EEG2: 200 shared cues, which is the whole reason it is here")
+    def _():
+        src = replay.thingseeg2_source(root, "sub-01")
+        s = src.sessions()[0]
+        cues = set(int(c) for c in np.unique(s.labels))
+        assert cues == set(range(1, 201)), sorted(cues)[:5]
+        assert src.window_ms == 1000 and src.stride_ms == 1000, (
+            "window must equal the epoch, or frames average two epochs")
+        # every epoch is fully labelled, so no window is discarded for
+        # straddling a cue boundary
+        assert len(s.samples) == 200 * 80 * src.EPOCH_SAMPLES
+
+    @test("THINGS-EEG2: the cue names are the real concepts, not indices")
+    def _():
+        src = replay.thingseeg2_source(root, "sub-01")
+        names = src.sessions()[0].label_names
+        assert names.get(1) == "aircraft carrier", names.get(1)
+        assert len(names) == 200
+
+    @test("THINGS-EEG2: the two T1 spaces are different spaces, and say so")
+    def _():
+        bp = replay.thingseeg2_source(root, "sub-01", "bandpower")
+        ev = replay.thingseeg2_source(root, "sub-01", "evoked")
+        assert bp.feature_space != ev.feature_space, "R-5.4"
+        assert bp.dim == 5 * 17 and ev.dim == 20 * 17, (bp.dim, ev.dim)
+        win = np.random.default_rng(0).normal(0, 0.1, size=(100, 17))
+        assert len(ev.transform(win, 100.0)) == ev.dim
+        # the tail is the LAST 800 ms: on this source that is post-stimulus,
+        # and taking the head instead would silently score the baseline period
+        assert np.allclose(ev.transform(win, 100.0)[:17], win[20])
+
+    @test("THINGS-EEG2: samples sit inside normalised full scale")
+    def _():
+        src = replay.thingseeg2_source(root, "sub-01")
+        peak = float(np.max(np.abs(src.sessions()[0].samples)))
+        assert peak <= 1.0, f"normalised full scale exceeded: {peak}"
+
+
 def dataset_tests(root):
     @test("a real DB5 subject produces a CONFORMANT capture")
     def _():
@@ -719,6 +862,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", help="ninapro_db5 directory; dataset tests skip without it")
     ap.add_argument("--eeg-root", help="ds007822 directory; EEG tests skip without it")
+    ap.add_argument("--te2-root", help="THINGS-EEG2 directory; those tests skip without it")
     args = ap.parse_args()
     if args.root and os.path.isdir(args.root):
         dataset_tests(args.root)
@@ -728,6 +872,10 @@ def main():
         eeg_tests(args.eeg_root)
     else:
         print("  skip  EEG tests (no --eeg-root)")
+    if args.te2_root and os.path.isdir(args.te2_root):
+        thingseeg2_tests(args.te2_root)
+    else:
+        print("  skip  THINGS-EEG2 tests (no --te2-root)")
     print(f"\n{len(passed)} passed, {len(failed)} failed")
     return 1 if failed else 0
 
