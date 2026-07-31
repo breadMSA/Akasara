@@ -288,7 +288,8 @@ the reference frame, which is the territory R-9.1 governs.
 python test_replay.py --root <ninapro_db5 dir> --eeg-root <ds007822 dir>
 ```
 
-31 tests. Dataset tests skip without their roots; everything else runs anywhere.
+36 tests with both roots, 31 without — the dataset suites skip when their root is
+absent, and everything else runs anywhere.
 Included: the multi-session regression in both directions, the R-9.2 rounding
 rule pinned across both codecs, cross-language self-test agreement to under
 1e-12, an end-to-end WebSocket client with the §10.4 control plane, a check that
@@ -333,6 +334,10 @@ bytes — and a stage that cannot exist at the sample rate (a 450 Hz lowpass on 
 normalisation `sources.py` applies for T1, because a T3 stream carrying
 normalised floats is a T2 with the wrong label.
 
-Not yet run against the real datasets on this machine — the roots are not present
-here, so the raw-tier writer is covered by unit tests and by the descriptor
-checks, and the DB5/EEG `raw/` output is unmeasured.
+Run against both real datasets, and the table above is what came out rather than
+what was declared. DB5 subject s1 writes `tiers t1, t2, t3`, 568,540 samples ×
+16 channels; the T3 array lands at **min −128, max +127** — the signed 8-bit
+`count` the descriptor claims, arrived at from the recording and not from the
+sidecar — with the T2 array filtered and correlating 0.95 against it. ds007822
+sub-G01S01 writes `tiers t1, t2` and **no T3**, so the refusal in the second row
+is a property of the output and not only of the prose.
