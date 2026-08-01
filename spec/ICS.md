@@ -144,6 +144,8 @@ about §7.*
 | R-11.3 | MUST | Your claim reads "ASE-0.1 Core conformant", names the exact firmware version tested, and ships with the descriptor and suite output. No family, roadmap, or unreleased-version claims | declaration | | firmware version: |
 | R-11.4 | — | *Self-certification: no fee, no gatekeeper, no revoking authority.* Not a vendor obligation | — | — | — |
 | R-11.5 | SHOULD | If you offer this feature space for cross-user use: it beats the channel-mean reduction of itself on your own data and task, by a margin whose 95% CI excludes zero — and you publish the task, subject count, and bootstrap unit | declaration | | outside the suite by construction |
+| R-11.5.1 | MUST if you publish a margin | The enrollment behind that margin is stated in samples **and in distinct donning sessions**, and is the enrollment the product ships with | declaration | | samples: / donnings: |
+| R-11.5.2 | MUST if you publish a margin | The frames-to-score transform is stated, is identical in both arms, and — if any fitted step's parameter count scales with the feature dimension — the margin is also reported under a pipeline with no such step | declaration | | second pipeline reported: Y / N / n.a. |
 
 ## Appendix A — per-kind `quality`
 

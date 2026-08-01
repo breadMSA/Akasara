@@ -352,3 +352,70 @@ document had not imagined:
   noise-covariance one, so it bounds the direction, not the magnitude.
 
 Requirement count: 53 -> 54.
+
+### Ninth revision — 2026-08-01: the donning curve, and two ways an R-11.5 margin could drift
+
+- **R-7.5.1's "~20 donning sessions" moves from asserted to bounded.** It had
+  been extrapolated from offline fitting behaviour; no dataset on hand could
+  locate where a re-enrollment curve saturates, because the cross-day EMG sets
+  used elsewhere here carry two sessions per subject. CEMHSEY carries eleven
+  consecutive days per subject with the electrode grids re-applied each morning.
+  Four GESTURE subjects, 11-way gesture recognition on a held-out day, chance
+  0.091: **0.450 at one donning, 0.541 at four, 0.600 at ten**, with 90% of the
+  ten-donning accuracy reached by four donnings, 95% by seven, 99% by nine. The
+  tenth donning is still worth a statistically nonzero +0.006, CI [+0.000,
+  +0.011], so the curve does not plateau in the strict sense while being flat in
+  the practical one; bounding every further donning by that last step, all ten
+  donnings between 10 and 20 could add at most +0.057. **~20 is neither bounded
+  from below by this nor contradicted; the substantive claim it stands for is
+  what got measured.** The 90-day floor is unchanged and is now more
+  conservative, not less.
+- **The confound was controlled rather than noted.** One trial per day makes
+  *k* days also *k* repetitions — the half already bounded on Hyser. CEMHSEY's
+  five trials per day give a single-donning arm at matched row count and matched
+  held-out test days, and because that arm always enrolls on day 1 it also sits
+  farther from the test day, so the *k* = 1 gap (one donning and one trial on
+  both sides) is differenced out. What remains is donning diversity alone:
+  **+0.018 at two sessions, +0.032 at three, +0.044 at four, CI [+0.031,
+  +0.067], positive on 4 of 4 subjects.** Roughly half of what four enrollment
+  sessions buy is repetition and half is their being separate donnings. This
+  also retires the open item that said a second donning's effect was unresolved:
+  Hyser's −0.015, CI [−0.039, +0.011] was a power problem, not a null.
+- **An error caught before it reached the document, recorded because the lesson
+  is cheap.** The first version of this analysis used the per-feature
+  standardisation this repository uses elsewhere and reported one donning at
+  0.181 — barely above chance — and a total gain of +0.537. That is a degenerate
+  estimator, not a finding: 1280 free parameters fitted to 11 enrollment rows.
+  Under three non-degenerate normalisations the gain is +0.137 to +0.152 and the
+  curve is far flatter. Every headline above is now published with its
+  sensitivity to that choice.
+- **R-11.5.1 and R-11.5.2 added**, from what the same dataset showed about the
+  criterion rather than about any feature space. The same 1280-d space against
+  its own channel-mean reduction, identical samples, splits and pipeline, reports
+  a margin of **+0.093 at one donning and +0.177 at ten** — the degenerate twin
+  saturates at once while the real space keeps improving, so two vendors quoting
+  either number can hold the same device. And holding the enrollment fixed while
+  changing only the normalisation moves the one-donning margin from **+0.422 to
+  −0.126**: a per-feature standard deviation is one free parameter per dimension,
+  so any fitted step whose parameter count scales with `dim` penalises the richer
+  space at small enrollment — the floor-by-`dim` R-11.5 already refuses, arriving
+  through the back door with its sign reversed. R-11.5.1 requires the enrollment
+  behind a published margin to be stated in donning sessions as well as samples;
+  R-11.5.2 requires the frames-to-score transform to be stated and, where it
+  contains such a step, the margin to be reported under a pipeline without one.
+  Identical pipelines in both arms is necessary and not sufficient — the inverted
+  row had them.
+- **Not a fourth cross-user leg, and labelled as such.** CEMHSEY's transfer axis
+  is within-user across days, not cross-user, so none of its margins are
+  comparable with the DB5 / Hyser / EEG legs. What it isolates is the
+  measurement's sensitivity to things R-11.5 did not constrain.
+- **Loader note.** CEMHSEY ships raw `.mat` with no label files; labels come from
+  its published fixed cue grid (11 gestures, 5 s rest then 10 s hold / 5 s rest).
+  The grid was verified against the recordings before being trusted — on one
+  file each of the eleven hold windows carries 1.3-4.6x the rectified amplitude
+  of the gap beside it, and across all 44 the grid's best-fit time offset is
+  0.0-0.8 s, i.e. reaction time and well inside the 1.5 s trimmed from each hold
+  — because a fixed-order protocol turns a labelling error into a systematic one
+  rather than noise.
+
+Requirement count: 54 -> 56.

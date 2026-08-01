@@ -64,10 +64,10 @@
       "subjects": 6,
       "bootstrap_unit": "subject",
       "enrollment_samples": 312,
-      "enrollment_donnings": 8,
-      "enrollment_is_shipped": true,
-      "pipeline": "per-channel DC removal, log, enrollment-mean centring, cosine to per-gesture centroids",
-      "pipeline_scales_with_dim": false
+      "enrollment_donnings": 1,
+      "enrollment_is_shipped": false,
+      "pipeline": "per-feature standardisation fitted on the enrollment, then cosine",
+      "pipeline_scales_with_dim": true
     }
   },
   "t0": {

@@ -320,6 +320,34 @@ function checkCapability(cap) {
       } else {
         pass("R-11.5", `cross-user margin ${m.margin} CI [${m.ci_low}, ${m.ci_high}] over ${m.subjects} subjects on "${m.task}"`);
       }
+
+      // R-11.5.1 — the same space measured on CEMHSEY reports +0.093 at one
+      // donning and +0.177 at ten, so a margin without its enrollment is not
+      // comparable with anyone else's.
+      const e = ["enrollment_samples", "enrollment_donnings"].filter((f) => m[f] === undefined);
+      if (e.length) {
+        fail("R-11.5.1", `a stated margin must carry the enrollment it was measured at; missing ${e.join(", ")}`);
+      } else if (m.enrollment_is_shipped === false) {
+        warn("R-11.5.1", `margin measured at ${m.enrollment_donnings} donnings, which is not the enrollment the product ships with; it describes a regime the user is not in`);
+      } else {
+        pass("R-11.5.1", `margin measured at ${m.enrollment_samples} samples over ${m.enrollment_donnings} donning session(s)`);
+      }
+
+      // R-11.5.2 — identical pipelines in both arms is necessary and not
+      // sufficient. A fitted step with one free parameter per feature inverted
+      // the sign of this margin on CEMHSEY (+0.422 -> -0.126 at one donning),
+      // because the richer space must estimate more of them from the same rows.
+      if (m.pipeline === undefined) {
+        fail("R-11.5.2", "a stated margin must describe the transform from exported frames to retrieval score");
+      } else if (m.pipeline_scales_with_dim === undefined) {
+        fail("R-11.5.2", "pipeline stated without saying whether any fitted step's parameter count scales with the feature dimension");
+      } else if (m.pipeline_scales_with_dim && m.margin_without_dim_scaled_step === undefined) {
+        fail("R-11.5.2", "pipeline contains a fitted step whose parameters scale with dim; the margin must also be reported under a pipeline without one");
+      } else if (m.pipeline_scales_with_dim) {
+        pass("R-11.5.2", `pipeline "${m.pipeline}" scales with dim; second margin ${m.margin_without_dim_scaled_step} reported without that step`);
+      } else {
+        pass("R-11.5.2", `pipeline "${m.pipeline}", no fitted step scaling with dim`);
+      }
     }
   }
 

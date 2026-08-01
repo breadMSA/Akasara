@@ -654,18 +654,71 @@ and it is not the intent.
 > 90 days covers the median with margin and still does not cover the deepest
 > tail.
 >
-> What remains unmeasured is the **20 donning sessions** itself; it is
-> extrapolated from fitting behaviour observed offline, not measured. The
-> cross-day EMG dataset used elsewhere in this document (Hyser) carries two
-> sessions per subject, which cannot show where a learning curve saturates — it
-> bounds only the data-volume half, which saturates near 100 single-session
-> trials. An earlier revision said no open dataset could settle the other half;
-> that was wrong. CEMHSEY records 11 consecutive days with the electrode grids
-> taken down and re-applied each day, openly on Zenodo
-> (10.5281/zenodo.14224328, 10.5281/zenodo.14272463), and the
-> registration-gated Ninapro DB6 (10 sessions over 5 days) is a second option.
-> Neither reaches 20 donnings, so either would bound the parameter rather than
-> confirm it. It stays asserted until one of them is run.
+> The **20 donning sessions** figure was extrapolated rather than measured. It
+> has now been measured, on the one open dataset that can carry it. CEMHSEY
+> records 11 consecutive days per subject with the electrode grids taken down
+> and re-applied each morning — the experimenter outlines each array with a
+> marker before removal, so the re-donning is deliberate and imperfect in the way
+> a user's is (10.5281/zenodo.14224328, 10.5281/zenodo.14272463). Four GESTURE
+> subjects, 320 channels at 2048 Hz, one trial per day. The dataset ships no
+> label files; labels come from its published fixed cue grid, which was checked
+> against the recordings before it was trusted and holds on all 44 files to
+> within 0.8 s. Enrolling on *k* of those days and recognising a held-out day's
+> gestures (11-way, chance 0.091; MAV/RMS/WL/VAR per channel; nearest centroid;
+> normalisation fitted on the enrollment rows only):
+>
+> | donnings *k* | 1 | 2 | 3 | 4 | 5 | 7 | 10 |
+> | --- | --- | --- | --- | --- | --- | --- | --- |
+> | accuracy | 0.450 | 0.492 | 0.525 | 0.541 | 0.555 | 0.574 | 0.600 |
+>
+> 90% of the ten-donning accuracy arrives by *k* = 4, 95% by *k* = 7, 99% by
+> *k* = 9. The curve has not flattened in the statistical sense — the tenth
+> donning is still worth +0.006, CI [+0.000, +0.011] — but it has in the
+> practical one: that tenth donning buys six tenths of a point against +0.150 for
+> the first ten together, and bounding every further donning by the last measured
+> step, everything between 10 and 20 could add at most +0.057, CI [+0.005,
+> +0.109].
+>
+> **Donning diversity is a real term and not a restatement of data volume.** With
+> one trial per day, *k* days is also *k* repetitions, which is the half Hyser
+> already bounded. CEMHSEY records five trials per day, so the control is an arm
+> that enrolls on *k* trials of a **single** day and is tested on the same
+> held-out days: same row count, same pipeline, one donning. Because that arm
+> always enrolls on day 1 it also sits farther from the test day, and at *k* = 1
+> both arms are one donning and one trial, so the *k* = 1 gap is that distance
+> offset with no diversity in it and is subtracted:
+>
+> | *k* | multi-donning | single-donning | diversity term (vs *k* = 1) |
+> | --- | --- | --- | --- |
+> | 2 | 0.492 | 0.396 | +0.018, CI [+0.009, +0.026] |
+> | 3 | 0.525 | 0.415 | +0.032, CI [+0.021, +0.047] |
+> | 4 | 0.541 | 0.419 | +0.044, CI [+0.031, +0.067] |
+>
+> Positive on 4 of 4 subjects at every *k*. Of the +0.091 that four enrollment
+> sessions add over one, roughly half is repetition and half is the sessions
+> being separate donnings. One subject's single-donning arm is flat outright
+> (0.329 → 0.329 over four trials) while its multi-donning arm rises 0.395 →
+> 0.474.
+>
+> So **~20 is not bounded from below by this, and is not contradicted.** What the
+> figure stands for — that an enrollment must span many separate donnings rather
+> than one long sitting — is now measured rather than asserted, and it is the
+> part that matters for the window. Where the number itself lands is that by 20
+> the enrollment has long since finished. The 90-day floor is unchanged, for the
+> reason above (it exists for the tail, not the median), and this makes it more
+> conservative rather than less.
+>
+> Four limits, because this is one dataset. It is HD-sEMG, within one user across
+> days, and read by a nearest-centroid classifier; a different modality, or a
+> vendor's own adaptive pipeline, may saturate elsewhere. Four subjects is a thin
+> cluster bootstrap — the shape of the curve is the same on all four, the height
+> is not. Eleven donnings is still not twenty. And the numbers depend on the
+> reading pipeline as much as on the donning count: under a per-feature
+> standardisation fitted on the enrollment — 1280 free parameters estimated from
+> 11 rows, which is degenerate — the same data reports 0.181 at *k* = 1 instead
+> of 0.450 and a total gain of +0.537 instead of +0.150. That is measurement
+> apparatus, not donning, and §11.5 records what the same sensitivity does to the
+> feature-space criterion, where it is worse.
 >
 > The completion condition, not the day count, is the substantive requirement;
 > the floor only stops a vendor from declaring re-enrollment "complete" the
@@ -1143,6 +1196,46 @@ Three things this settles, and one it does not:
   any stimulus, and a time-resolved space is the kind that loses most from that.
   Read +0.040 as an upper bound obtained under perfect alignment.
 
+**A fourth dataset, about the criterion rather than about any feature space.**
+CEMHSEY (§7's R-7.5.1 derivation, 4 subjects × 11 donnings) was run with the
+full 1280-d space against its own channel-mean 4-d reduction: identical samples,
+splits, subjects and pipeline in both arms, the only change being the reduction.
+Its transfer axis is within-user across days rather than cross-user, so this is
+**not** a fourth cross-user leg and no margin below should be compared with the
+three above. What it isolates is how much the *measurement* moves when things
+R-11.5 does not currently constrain are varied.
+
+**1. The margin is a function of the enrollment, not of the space alone.**
+
+| enrollment donnings | 1 | 3 | 5 | 7 | 10 |
+| --- | --- | --- | --- | --- | --- |
+| full 1280 d | 0.450 | 0.525 | 0.555 | 0.574 | 0.600 |
+| channel-mean 4 d | 0.356 | 0.406 | 0.420 | 0.425 | 0.423 |
+| margin | +0.093 | +0.119 | +0.135 | +0.149 | +0.177 |
+
+The degenerate twin saturates almost at once while the real space keeps
+improving, so the margin nearly doubles across the range (3 of 4 subjects
+positive throughout; the interval is a 4-cluster bootstrap and is thin). Two
+vendors quoting +0.093 and +0.177 can be holding the same device.
+
+**2. The margin can be inverted by a pipeline step the clause does not mention.**
+Both arms above share one enrollment-fitted normalisation. Change only *which*:
+
+| normalisation | margin at *k* = 1 | margin at *k* = 10 |
+| --- | --- | --- |
+| log, centred | +0.093 | +0.177 |
+| centred | +0.283 | +0.405 |
+| none | +0.422 | +0.455 |
+| per-feature standardised | **−0.126** | +0.364 |
+
+The last row fails the criterion at one donning and passes it at ten, on one
+device and one dataset. The mechanism is not exotic: a per-feature standard
+deviation is one free parameter per dimension, so the 1280-d space must estimate
+1280 of them from the same 11 rows the 4-d space uses for 4. **Any fitted step
+whose parameter count scales with the feature dimension penalises the richer
+space at small enrollment** — which is the floor-by-`dim` that R-11.5 already
+refuses, arriving through the back door and with its sign reversed.
+
 **Criterion, now normative at SHOULD level (was provisional and non-normative):**
 
 **R-11.5** A T1 feature space offered for cross-user use SHOULD beat the
@@ -1155,6 +1248,19 @@ the margin can be earned from structure other than the intended signal. A floor
 MUST NOT be expressed as a minimum `dim` — dimension count is not merit, and on
 DB5 the 16-d MAV set beat the 64-d full set (+0.016, CI [+0.009, +0.024]).
 
+**R-11.5.1 (state the enrollment).** A published R-11.5 margin MUST state the
+enrollment it was obtained under, in both samples and **distinct donning
+sessions**, and that enrollment SHOULD be the one the product ships with. A
+margin measured at an enrollment the user never has describes a regime the
+device is never in.
+
+**R-11.5.2 (state the pipeline, and do not let it scale with `dim`).** The
+transform from exported frames to retrieval score MUST be stated, and MUST be
+identical in both arms. Where it contains a fitted step whose free parameters
+scale with the feature dimension, the margin MUST also be reported under a
+pipeline containing no such step. Identical pipelines in both arms is necessary
+and not sufficient: the inverted row in the table above had them.
+
 Honest limits. The three legs are 6 subjects / 30 pairs (DB5), 6 subjects / 30
 pairs (Hyser), and 33 subjects / 66 pairs (EEG). In none of them are the pairs
 independent — each subject appears in several — so a bootstrap over pairs gives a
@@ -1164,13 +1270,12 @@ Hyser retraction moves 27 of 30 pairs and the EEG margin 55 of 66. Three legs is
 still three legs, and no absolute score is claimed for any of them — 4.6×, 2.0×
 and 1.8× on the three datasets is the whole reason the floor is relative.
 
-One parameter in this area remains unmeasured and is not measured here: R-7.5.1's
-"~20 donning sessions". Hyser carries two sessions per subject, which bounds only
-the data-volume half. A dataset that could settle the donning-diversity half does
-exist — CEMHSEY, 11 consecutive days with the grids re-applied each day, Zenodo
-10.5281/zenodo.14224328 and .14272463 — but 11 days is not 20, so it would move
-the parameter from asserted to partially bounded rather than to measured. It is
-recorded here as the next thing to run, not as a result.
+R-7.5.1's "~20 donning sessions" was recorded here as the next thing to run. It
+has been run — CEMHSEY, above and in §7 — and it moved the parameter from
+asserted to bounded: donning diversity is a real term separable from data volume
+(+0.044 at four sessions, CI [+0.031, +0.067], 4 of 4 subjects), and the
+enrollment is 95% finished by seven donnings. Eleven donnings is still not
+twenty, so "bounded" is the honest word and "measured" is not.
 
 The general lesson, recorded because it is cheap and this document paid for it
 twice: a number that reaches a spec must be replicated on a second dataset, and
@@ -1251,8 +1356,11 @@ specification that stops improving, not one that stops being safe to implement.
   the device knows where that landmark is; in practice the user positions the
   band by eye. **Partly retired** by R-4.2.2: the measured cost of getting it
   wrong is ~9% at worst within one electrode spacing, and whole-electrode error
-  is free, so the descriptor does not need millimetres. What remains open is
-  axial (along-limb) placement, which was not tested and is not permutation-like.
+  is free, so the descriptor does not need millimetres. Axial (along-limb)
+  placement **is no longer open**: experiment X-D measured ring-to-ring transfer
+  at −0.0162, CI [−0.0238, −0.0084], which is a real cost rather than a
+  labelling detail, and R-4.2.3 was written from it. This bullet claimed the
+  opposite until 2026-07-31; it was stale, not a second finding.
 - `ase.opaque.v1` still cannot be compared **across models**. R-4.2.1 recovered
   the within-model case, which is the one that actually occurs; cross-model
   comparability for opaque geometries is genuinely unsolved and may not be
@@ -1267,26 +1375,34 @@ specification that stops improving, not one that stops being safe to implement.
   transfer task is vendor-chosen, and the margin can be earned from generic
   transferable structure rather than the intended signal — most of the EEG margin
   survives between people who never shared a round. Closing that needs a task a
-  vendor cannot overfit, not another modality.
+  vendor cannot overfit, not another modality. Two ways the number could drift
+  without anyone lying were closed in 2026-08 by R-11.5.1 and R-11.5.2, after a
+  fourth dataset showed the same space's margin doubling with enrollment size and
+  changing sign under a normalisation whose parameter count scales with `dim`.
 - Enrollment data volume saturates around ~100 single-session trials on Hyser
-  (P@1 0.132 at ~40 trials, 0.164 at ~100, 0.166 at ~200). That bounds the
-  data-volume half of R-7.5.1's parameter; the donning-diversity half still does
-  not have a dataset (two sessions per subject is not a learning curve).
-- Whether a second donning helps or hurts enrollment is **not resolved**: Hyser
-  cross-day vs same-day came out −0.015 with CI [−0.039, +0.011] over 6 pairs,
-  i.e. no detectable effect at this power, which contradicts neither exp-22's
-  positive nor a null.
+  (P@1 0.132 at ~40 trials, 0.164 at ~100, 0.166 at ~200). The donning-diversity
+  half **is no longer open**: CEMHSEY's 11 donnings give the curve in R-7.5.1,
+  and a single-donning control arm separates diversity from volume rather than
+  leaving them confounded. What is still open is that eleven donnings is not
+  twenty, and that the curve is one modality read by one classifier.
+- Whether a second donning helps or hurts enrollment **is resolved, and it
+  helps**: Hyser's −0.015, CI [−0.039, +0.011] over 6 pairs was a power problem,
+  not a null. CEMHSEY's single-donning control arm puts the second donning at
+  +0.018, CI [+0.009, +0.026], positive on 4 of 4 subjects, with the day-distance
+  offset differenced out.
 - Self-test (R-5.7) proves the transform is unchanged. It does not prove the
   transform is applied to real acquisition — a device could pass self-test and
   still stream garbage. Detecting that needs a physical fixture.
 - The security model (§10.5) leaves same-machine isolation to the host OS. That
   is defensible for a read-only export spec and would be indefensible the moment
   any successor adds a write path.
-- The 90-day floor in R-7.5.1 now rests on **one** unmeasured parameter, not
-  two: wear frequency is sourced (Rock Health 2025, N = 8,000), but the
-  ~20-donning enrollment target is still an extrapolation. Public cross-day EMG
-  datasets carry two sessions per subject, which cannot locate a saturation
-  point; this needs a many-donning dataset or vendor telemetry.
+- The 90-day floor in R-7.5.1 now rests on **no** unmeasured parameter: wear
+  frequency is sourced (Rock Health 2025, N = 8,000) and the enrollment target is
+  bounded on CEMHSEY (95% of the achievable accuracy by seven donnings, at most
+  +0.057 left between ten and twenty). Both point the same way — the floor is
+  conservative — so it is unchanged. It rests instead on a **judgement**, that a
+  floor should cover the adherence tail rather than the median, and that is a
+  policy choice no dataset settles.
 - `time_echo` stays a SHOULD, now on evidence at the document's own window
   lengths rather than at gesture granularity (R-5.2.1). The untested case is a
   workload that pairs two people sample-by-sample rather than event-by-event.

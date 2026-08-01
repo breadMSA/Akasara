@@ -70,7 +70,10 @@ Vectors cover a conformant device, the align profile, a T0-only cloud-gated
 device, a stream with a silent transform change, a device promising a frame rate
 its radio cannot carry, a device inventing a wall clock it does not have, and a
 device quoting an R-11.5 feature-space margin without the task, subject count and
-resampling unit that make an interval readable.
+resampling unit that make an interval readable, and a device quoting one measured
+at a single donning through a pipeline whose fitted parameters scale with the
+feature dimension (R-11.5.1, R-11.5.2) — the two knobs that, on CEMHSEY, move the
+same space's margin from +0.093 to +0.177 and from +0.422 to −0.126.
 
 `--compare` is the point of R-5.7: a device publishes what its production
 transform returns for one fixed synthetic input, so a silently re-trained
