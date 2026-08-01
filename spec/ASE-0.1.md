@@ -659,25 +659,23 @@ and it is not the intent.
 > records 11 consecutive days per subject with the electrode grids taken down
 > and re-applied each morning — the experimenter outlines each array with a
 > marker before removal, so the re-donning is deliberate and imperfect in the way
-> a user's is (10.5281/zenodo.14224328, 10.5281/zenodo.14272463). Four GESTURE
+> a user's is (10.5281/zenodo.14224328, 10.5281/zenodo.14272463). All six GESTURE
 > subjects, 320 channels at 2048 Hz, one trial per day. The dataset ships no
 > label files; labels come from its published fixed cue grid, which was checked
-> against the recordings before it was trusted and holds on all 44 files to
+> against the recordings before it was trusted and holds on all 66 files to
 > within 0.8 s. Enrolling on *k* of those days and recognising a held-out day's
 > gestures (11-way, chance 0.091; MAV/RMS/WL/VAR per channel; nearest centroid;
 > normalisation fitted on the enrollment rows only):
 >
 > | donnings *k* | 1 | 2 | 3 | 4 | 5 | 7 | 10 |
 > | --- | --- | --- | --- | --- | --- | --- | --- |
-> | accuracy | 0.450 | 0.492 | 0.525 | 0.541 | 0.555 | 0.574 | 0.600 |
+> | accuracy | 0.440 | 0.491 | 0.520 | 0.539 | 0.548 | 0.565 | 0.585 |
 >
-> 90% of the ten-donning accuracy arrives by *k* = 4, 95% by *k* = 7, 99% by
-> *k* = 9. The curve has not flattened in the statistical sense — the tenth
-> donning is still worth +0.006, CI [+0.000, +0.011] — but it has in the
-> practical one: that tenth donning buys six tenths of a point against +0.150 for
-> the first ten together, and bounding every further donning by the last measured
-> step, everything between 10 and 20 could add at most +0.057, CI [+0.005,
-> +0.109].
+> 90% of the ten-donning accuracy arrives by *k* = 4, 95% by *k* = 6, 99% by
+> *k* = 9, and **the curve has flattened inside the range the dataset carries**:
+> the tenth donning is worth +0.004, CI [−0.005, +0.011], against +0.145 for the
+> first ten together. Bounding every further donning by that last step, everything
+> between 10 and 20 could add at most +0.036, CI [−0.048, +0.106].
 >
 > **Donning diversity is a real term and not a restatement of data volume.** With
 > one trial per day, *k* days is also *k* repetitions, which is the half Hyser
@@ -690,35 +688,39 @@ and it is not the intent.
 >
 > | *k* | multi-donning | single-donning | diversity term (vs *k* = 1) |
 > | --- | --- | --- | --- |
-> | 2 | 0.492 | 0.396 | +0.018, CI [+0.009, +0.026] |
-> | 3 | 0.525 | 0.415 | +0.032, CI [+0.021, +0.047] |
-> | 4 | 0.541 | 0.419 | +0.044, CI [+0.031, +0.067] |
+> | 2 | 0.491 | 0.385 | +0.039, CI [+0.016, +0.068] |
+> | 3 | 0.520 | 0.401 | +0.052, CI [+0.029, +0.078] |
+> | 4 | 0.539 | 0.407 | +0.064, CI [+0.040, +0.092] |
 >
-> Positive on 4 of 4 subjects at every *k*. Of the +0.091 that four enrollment
-> sessions add over one, roughly half is repetition and half is the sessions
-> being separate donnings. One subject's single-donning arm is flat outright
-> (0.329 → 0.329 over four trials) while its multi-donning arm rises 0.395 →
-> 0.474.
+> Positive on 6 of 6 subjects at every *k*. Of the +0.099 that four enrollment
+> sessions add over one, roughly two thirds is the sessions being separate
+> donnings and one third is repetition. Two subjects make the point without any
+> statistics: one's single-donning arm is flat outright (0.329 → 0.329 over four
+> trials) and another's *declines* (0.295 → 0.269), while their multi-donning arms
+> rise 0.395 → 0.474 and 0.341 → 0.423.
 >
 > So **~20 is not bounded from below by this, and is not contradicted.** What the
 > figure stands for — that an enrollment must span many separate donnings rather
 > than one long sitting — is now measured rather than asserted, and it is the
-> part that matters for the window. Where the number itself lands is that by 20
-> the enrollment has long since finished. The 90-day floor is unchanged, for the
+> part that matters for the window. Where the number itself lands is that the
+> enrollment is finished well before 20. The 90-day floor is unchanged, for the
 > reason above (it exists for the tail, not the median), and this makes it more
 > conservative rather than less.
 >
 > Four limits, because this is one dataset. It is HD-sEMG, within one user across
 > days, and read by a nearest-centroid classifier; a different modality, or a
-> vendor's own adaptive pipeline, may saturate elsewhere. Four subjects is a thin
-> cluster bootstrap — the shape of the curve is the same on all four, the height
-> is not. Eleven donnings is still not twenty. And the numbers depend on the
-> reading pipeline as much as on the donning count: under a per-feature
-> standardisation fitted on the enrollment — 1280 free parameters estimated from
-> 11 rows, which is degenerate — the same data reports 0.181 at *k* = 1 instead
-> of 0.450 and a total gain of +0.537 instead of +0.150. That is measurement
-> apparatus, not donning, and §11.5 records what the same sensitivity does to the
-> feature-space criterion, where it is worse.
+> vendor's own adaptive pipeline, may saturate elsewhere. Six subjects is a thin
+> cluster bootstrap — the shape of the curve is the same on all six, the height is
+> not, and **one subject's curve is not even monotone**: it peaks at *k* = 7
+> (0.426) and falls to 0.409 by *k* = 10, so the headroom bound above, which
+> assumes decaying increments, has a counterexample inside its own sample. Eleven
+> donnings is still not twenty. And the numbers depend on the reading pipeline as
+> much as on the donning count: under a per-feature standardisation fitted on the
+> enrollment — 1280 free parameters estimated from 11 rows, which is degenerate —
+> the same data reports 0.230 at *k* = 1 instead of 0.440 and a total gain of
+> +0.519 instead of +0.145. That is measurement apparatus, not donning, and §11.5
+> records what the same sensitivity does to the feature-space criterion, where it
+> is worse.
 >
 > The completion condition, not the day count, is the substantive requirement;
 > the floor only stops a vendor from declaring re-enrollment "complete" the
@@ -1197,7 +1199,7 @@ Three things this settles, and one it does not:
   Read +0.040 as an upper bound obtained under perfect alignment.
 
 **A fourth dataset, about the criterion rather than about any feature space.**
-CEMHSEY (§7's R-7.5.1 derivation, 4 subjects × 11 donnings) was run with the
+CEMHSEY (§7's R-7.5.1 derivation, 6 subjects × 11 donnings) was run with the
 full 1280-d space against its own channel-mean 4-d reduction: identical samples,
 splits, subjects and pipeline in both arms, the only change being the reduction.
 Its transfer axis is within-user across days rather than cross-user, so this is
@@ -1209,24 +1211,25 @@ R-11.5 does not currently constrain are varied.
 
 | enrollment donnings | 1 | 3 | 5 | 7 | 10 |
 | --- | --- | --- | --- | --- | --- |
-| full 1280 d | 0.450 | 0.525 | 0.555 | 0.574 | 0.600 |
-| channel-mean 4 d | 0.356 | 0.406 | 0.420 | 0.425 | 0.423 |
-| margin | +0.093 | +0.119 | +0.135 | +0.149 | +0.177 |
+| full 1280 d | 0.440 | 0.520 | 0.548 | 0.565 | 0.585 |
+| channel-mean 4 d | 0.369 | 0.418 | 0.431 | 0.435 | 0.433 |
+| margin | +0.071 | +0.102 | +0.117 | +0.130 | +0.152 |
 
 The degenerate twin saturates almost at once while the real space keeps
-improving, so the margin nearly doubles across the range (3 of 4 subjects
-positive throughout; the interval is a 4-cluster bootstrap and is thin). Two
-vendors quoting +0.093 and +0.177 can be holding the same device.
+improving, so the margin more than doubles across the range (5 of 6 subjects
+positive throughout; the interval is a 6-cluster bootstrap and is thin). Two
+vendors quoting +0.071 and +0.152 can be holding the same device — and the
++0.071 end does not clear the criterion's own bar, its CI being [−0.000, +0.136].
 
 **2. The margin can be inverted by a pipeline step the clause does not mention.**
 Both arms above share one enrollment-fitted normalisation. Change only *which*:
 
 | normalisation | margin at *k* = 1 | margin at *k* = 10 |
 | --- | --- | --- |
-| log, centred | +0.093 | +0.177 |
-| centred | +0.283 | +0.405 |
-| none | +0.422 | +0.455 |
-| per-feature standardised | **−0.126** | +0.364 |
+| log, centred | +0.071 | +0.152 |
+| centred | +0.295 | +0.367 |
+| none | +0.419 | +0.423 |
+| per-feature standardised | **−0.095** | +0.361 |
 
 The last row fails the criterion at one donning and passes it at ten, on one
 device and one dataset. The mechanism is not exotic: a per-feature standard
@@ -1273,9 +1276,9 @@ and 1.8× on the three datasets is the whole reason the floor is relative.
 R-7.5.1's "~20 donning sessions" was recorded here as the next thing to run. It
 has been run — CEMHSEY, above and in §7 — and it moved the parameter from
 asserted to bounded: donning diversity is a real term separable from data volume
-(+0.044 at four sessions, CI [+0.031, +0.067], 4 of 4 subjects), and the
-enrollment is 95% finished by seven donnings. Eleven donnings is still not
-twenty, so "bounded" is the honest word and "measured" is not.
+(+0.064 at four sessions, CI [+0.040, +0.092], 6 of 6 subjects), and the
+enrollment is 95% finished by six donnings. Eleven donnings is still not twenty,
+so "bounded" is the honest word and "measured" is not.
 
 The general lesson, recorded because it is cheap and this document paid for it
 twice: a number that reaches a spec must be replicated on a second dataset, and
@@ -1388,7 +1391,7 @@ specification that stops improving, not one that stops being safe to implement.
 - Whether a second donning helps or hurts enrollment **is resolved, and it
   helps**: Hyser's −0.015, CI [−0.039, +0.011] over 6 pairs was a power problem,
   not a null. CEMHSEY's single-donning control arm puts the second donning at
-  +0.018, CI [+0.009, +0.026], positive on 4 of 4 subjects, with the day-distance
+  +0.039, CI [+0.016, +0.068], positive on 6 of 6 subjects, with the day-distance
   offset differenced out.
 - Self-test (R-5.7) proves the transform is unchanged. It does not prove the
   transform is applied to real acquisition — a device could pass self-test and
@@ -1398,8 +1401,8 @@ specification that stops improving, not one that stops being safe to implement.
   any successor adds a write path.
 - The 90-day floor in R-7.5.1 now rests on **no** unmeasured parameter: wear
   frequency is sourced (Rock Health 2025, N = 8,000) and the enrollment target is
-  bounded on CEMHSEY (95% of the achievable accuracy by seven donnings, at most
-  +0.057 left between ten and twenty). Both point the same way — the floor is
+  bounded on CEMHSEY (95% of the achievable accuracy by six donnings, at most
+  +0.036 left between ten and twenty). Both point the same way — the floor is
   conservative — so it is unchanged. It rests instead on a **judgement**, that a
   floor should cover the adherence tail rather than the median, and that is a
   policy choice no dataset settles.

@@ -73,7 +73,7 @@ device quoting an R-11.5 feature-space margin without the task, subject count an
 resampling unit that make an interval readable, and a device quoting one measured
 at a single donning through a pipeline whose fitted parameters scale with the
 feature dimension (R-11.5.1, R-11.5.2) — the two knobs that, on CEMHSEY, move the
-same space's margin from +0.093 to +0.177 and from +0.422 to −0.126.
+same space's margin from +0.071 to +0.152 and from +0.419 to −0.095.
 
 `--compare` is the point of R-5.7: a device publishes what its production
 transform returns for one fixed synthetic input, so a silently re-trained
@@ -96,9 +96,9 @@ are actually asking for. It is non-normative and every claim in it points back
 to a clause here.
 
 `ICS.md` is the Implementation Conformance Statement — one row for every one of
-the 54 requirement identifiers in the specification, with what you are
+the 56 requirement identifiers in the specification, with what you are
 asserting, whether the suite can decide it or only record your declaration, and
-a column to fill in. Of the 49 answerable rows the suite decides 18 outright;
+a column to fill in. Of the 51 answerable rows the suite decides 20 outright;
 20 rest wholly or partly on the vendor's signature. That split is deliberate and
 is spelled out in R-11.2.
 

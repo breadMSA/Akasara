@@ -360,13 +360,12 @@ Requirement count: 53 -> 54.
   locate where a re-enrollment curve saturates, because the cross-day EMG sets
   used elsewhere here carry two sessions per subject. CEMHSEY carries eleven
   consecutive days per subject with the electrode grids re-applied each morning.
-  Four GESTURE subjects, 11-way gesture recognition on a held-out day, chance
-  0.091: **0.450 at one donning, 0.541 at four, 0.600 at ten**, with 90% of the
-  ten-donning accuracy reached by four donnings, 95% by seven, 99% by nine. The
-  tenth donning is still worth a statistically nonzero +0.006, CI [+0.000,
-  +0.011], so the curve does not plateau in the strict sense while being flat in
-  the practical one; bounding every further donning by that last step, all ten
-  donnings between 10 and 20 could add at most +0.057. **~20 is neither bounded
+  All six GESTURE subjects, 11-way gesture recognition on a held-out day, chance
+  0.091: **0.440 at one donning, 0.539 at four, 0.585 at ten**, with 90% of the
+  ten-donning accuracy reached by four donnings, 95% by six, 99% by nine. The
+  curve flattens inside the range the dataset carries — the tenth donning is
+  worth +0.004, CI [-0.005, +0.011] — and bounding every further donning by that
+  last step, all ten between 10 and 20 could add at most +0.036. **~20 is neither bounded
   from below by this nor contradicted; the substantive claim it stands for is
   what got measured.** The 90-day floor is unchanged and is now more
   conservative, not less.
@@ -376,27 +375,29 @@ Requirement count: 53 -> 54.
   held-out test days, and because that arm always enrolls on day 1 it also sits
   farther from the test day, so the *k* = 1 gap (one donning and one trial on
   both sides) is differenced out. What remains is donning diversity alone:
-  **+0.018 at two sessions, +0.032 at three, +0.044 at four, CI [+0.031,
-  +0.067], positive on 4 of 4 subjects.** Roughly half of what four enrollment
-  sessions buy is repetition and half is their being separate donnings. This
+  **+0.039 at two sessions, +0.052 at three, +0.064 at four, CI [+0.040,
+  +0.092], positive on 6 of 6 subjects.** Roughly two thirds of what four
+  enrollment sessions buy is their being separate donnings and one third is
+  repetition; one subject's single-donning arm is flat (0.329 -> 0.329) and
+  another's declines (0.295 -> 0.269). This
   also retires the open item that said a second donning's effect was unresolved:
   Hyser's −0.015, CI [−0.039, +0.011] was a power problem, not a null.
 - **An error caught before it reached the document, recorded because the lesson
   is cheap.** The first version of this analysis used the per-feature
   standardisation this repository uses elsewhere and reported one donning at
-  0.181 — barely above chance — and a total gain of +0.537. That is a degenerate
+  0.230 — barely above chance — and a total gain of +0.519. That is a degenerate
   estimator, not a finding: 1280 free parameters fitted to 11 enrollment rows.
-  Under three non-degenerate normalisations the gain is +0.137 to +0.152 and the
+  Under three non-degenerate normalisations the gain is +0.099 to +0.145 and the
   curve is far flatter. Every headline above is now published with its
   sensitivity to that choice.
 - **R-11.5.1 and R-11.5.2 added**, from what the same dataset showed about the
   criterion rather than about any feature space. The same 1280-d space against
   its own channel-mean reduction, identical samples, splits and pipeline, reports
-  a margin of **+0.093 at one donning and +0.177 at ten** — the degenerate twin
+  a margin of **+0.071 at one donning and +0.152 at ten** — the degenerate twin
   saturates at once while the real space keeps improving, so two vendors quoting
   either number can hold the same device. And holding the enrollment fixed while
-  changing only the normalisation moves the one-donning margin from **+0.422 to
-  −0.126**: a per-feature standard deviation is one free parameter per dimension,
+  changing only the normalisation moves the one-donning margin from **+0.419 to
+  -0.095**: a per-feature standard deviation is one free parameter per dimension,
   so any fitted step whose parameter count scales with `dim` penalises the richer
   space at small enrollment — the floor-by-`dim` R-11.5 already refuses, arriving
   through the back door with its sign reversed. R-11.5.1 requires the enrollment
@@ -413,7 +414,7 @@ Requirement count: 53 -> 54.
   its published fixed cue grid (11 gestures, 5 s rest then 10 s hold / 5 s rest).
   The grid was verified against the recordings before being trusted — on one
   file each of the eleven hold windows carries 1.3-4.6x the rectified amplitude
-  of the gap beside it, and across all 44 the grid's best-fit time offset is
+  of the gap beside it, and across all 66 the grid's best-fit time offset is
   0.0-0.8 s, i.e. reaction time and well inside the 1.5 s trimmed from each hold
   — because a fixed-order protocol turns a labelling error into a systematic one
   rather than noise.
