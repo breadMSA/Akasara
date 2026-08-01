@@ -348,6 +348,35 @@ function checkCapability(cap) {
       } else {
         pass("R-11.5.2", `pipeline "${m.pipeline}", no fitted step scaling with dim`);
       }
+
+      // R-11.5.3 — on THINGS-EEG2 the same space and pipeline yield -0.017 at a
+      // 2-way decision and +0.003 at 100-way, and fail at 1 averaged repetition
+      // while clearing at 80. A task named only in prose hides both knobs.
+      const t = ["task_cardinality", "task_trial_depth", "task_cue_selection"]
+        .filter((f) => m[f] === undefined);
+      if (t.length) {
+        fail("R-11.5.3", `a stated task must say how it was set up; missing ${t.join(", ")}`);
+      } else if (!Number.isInteger(m.task_cardinality) || m.task_cardinality < 2) {
+        fail("R-11.5.3", `task_cardinality ${m.task_cardinality} is not a decision among two or more candidates`);
+      } else if (!Number.isInteger(m.task_trial_depth) || m.task_trial_depth < 1) {
+        fail("R-11.5.3", `task_trial_depth ${m.task_trial_depth} is not a count of repetitions averaged per exported frame`);
+      } else {
+        // Both remaining checks are reported, not chained: a task can be at the
+        // wrong operating point AND have a selected cue set, and each costs the
+        // margin its own amount.
+        let clean = true;
+        if (m.task_matches_product === false) {
+          warn("R-11.5.3", `margin measured at ${m.task_cardinality}-way over ${m.task_trial_depth} averaged repetition(s), which is not what the product operates at`);
+          clean = false;
+        }
+        if (m.task_cue_selection !== "none") {
+          warn("R-11.5.3", `cue set selected by "${m.task_cue_selection}"; selection on any data can double a margin without changing the space`);
+          clean = false;
+        }
+        if (clean) {
+          pass("R-11.5.3", `task is ${m.task_cardinality}-way over ${m.task_trial_depth} averaged repetition(s), cue set unselected`);
+        }
+      }
     }
   }
 

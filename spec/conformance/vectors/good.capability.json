@@ -67,7 +67,11 @@
       "enrollment_donnings": 8,
       "enrollment_is_shipped": true,
       "pipeline": "per-channel DC removal, log, enrollment-mean centring, cosine to per-gesture centroids",
-      "pipeline_scales_with_dim": false
+      "pipeline_scales_with_dim": false,
+      "task_cardinality": 52,
+      "task_trial_depth": 1,
+      "task_cue_selection": "none",
+      "task_matches_product": true
     }
   },
   "t0": {

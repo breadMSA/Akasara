@@ -442,7 +442,11 @@ Requirement count: 54 -> 56.
   random draws.
 - **R-11.5.3** requires a published task to state its decision cardinality, its
   trial depth, and how the cue set was chosen; cardinality and depth SHOULD be
-  the ones the product operates at.
+  the ones the product operates at. In `check.mjs`, with a new vector
+  `bad-margin-task` — a margin measured 2-way over 80 averaged repetitions on a
+  cue set chosen for accuracy. It is **CONFORMANT with two warnings**, and that
+  is the point rather than a gap in the suite: a task can be made visible, not
+  forbidden.
 - **R-11.5 stays SHOULD permanently, and §11.5 now says why.** Knobs 1 and 2
   were closed by disclosure. The task cannot be — every row in the new table is
   disclosable and honest — and it cannot be fixed by specification without ASE

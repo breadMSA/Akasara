@@ -96,7 +96,17 @@
             "bootstrap_unit": {
               "enum": ["subject", "pair", "session", "trial"],
               "description": "the unit resampled; 'pair' is not independent when subjects recur across pairs"
-            }
+            },
+            "enrollment_samples": { "type": "integer", "minimum": 1, "description": "R-11.5.1" },
+            "enrollment_donnings": { "type": "integer", "minimum": 1, "description": "R-11.5.1 — distinct donning sessions, not samples" },
+            "enrollment_is_shipped": { "type": "boolean", "description": "R-11.5.1 — whether this is the enrollment the product ships with" },
+            "pipeline": { "type": "string", "minLength": 3, "description": "R-11.5.2 — the transform from exported frames to retrieval score, identical in both arms" },
+            "pipeline_scales_with_dim": { "type": "boolean", "description": "R-11.5.2 — whether any fitted step's parameter count scales with the feature dimension" },
+            "margin_without_dim_scaled_step": { "type": "number", "description": "R-11.5.2 — required when pipeline_scales_with_dim is true" },
+            "task_cardinality": { "type": "integer", "minimum": 2, "description": "R-11.5.3 — candidates per decision; the same space read -0.017 at 2 and +0.003 at 100 on THINGS-EEG2" },
+            "task_trial_depth": { "type": "integer", "minimum": 1, "description": "R-11.5.3 — repetitions averaged into each exported frame the task scores" },
+            "task_cue_selection": { "type": "string", "minLength": 3, "description": "R-11.5.3 — how the cue set was chosen; 'none' if no data was used to choose it" },
+            "task_matches_product": { "type": "boolean", "description": "R-11.5.3 — whether cardinality and depth are the ones the product operates at" }
           }
         }
       }

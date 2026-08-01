@@ -60,18 +60,18 @@
       "margin": 0.153,
       "ci_low": 0.121,
       "ci_high": 0.184,
-      "task": "calibration-free cross-subject retrieval of held-out gestures, 52-way",
+      "task": "cross-subject gesture transfer",
       "subjects": 6,
       "bootstrap_unit": "subject",
       "enrollment_samples": 312,
-      "enrollment_donnings": 1,
-      "enrollment_is_shipped": false,
-      "pipeline": "per-feature standardisation fitted on the enrollment, then cosine",
-      "pipeline_scales_with_dim": true,
-      "task_cardinality": 52,
-      "task_trial_depth": 1,
-      "task_cue_selection": "none",
-      "task_matches_product": true
+      "enrollment_donnings": 8,
+      "enrollment_is_shipped": true,
+      "pipeline": "per-channel DC removal, log, enrollment-mean centring, cosine to per-gesture centroids",
+      "pipeline_scales_with_dim": false,
+      "task_cardinality": 2,
+      "task_trial_depth": 80,
+      "task_cue_selection": "the 26 gestures our own subjects scored best on",
+      "task_matches_product": false
     }
   },
   "t0": {
