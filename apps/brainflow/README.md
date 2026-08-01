@@ -36,7 +36,7 @@ python producer.py --board SYNTHETIC_BOARD --kind semg --seconds 20 --out out/sy
 node ../../spec/conformance/check.mjs out/synth-eeg/capability.json \
      out/synth-eeg/frames.jsonl out/synth-eeg/selftest.json
 
-python test_producer.py        # 12 tests, no hardware
+python test_producer.py        # 13 tests, no hardware
 ```
 
 Measured 2026-07-30, BrainFlow 5.22.2, `SYNTHETIC_BOARD`:
@@ -49,6 +49,29 @@ Measured 2026-07-30, BrainFlow 5.22.2, `SYNTHETIC_BOARD`:
 The warnings are `clock.drift_ppm_max not declared` (BrainFlow does not expose
 it, and R-4.3 would rather have a warning than a number nobody measured) and, on
 the sEMG run, the opaque montage — see below.
+
+## Vendor SDKs that are BrainFlow under another name
+
+Some vendors ship their own Python package instead of upstreaming a board.
+MindRove's `mindrove` is a rename-level fork of BrainFlow's binding — same
+`BoardShim`, same `BoardIds`, same method signatures down to the `preset`
+default, and its own `SYNTHETIC_BOARD`. `--sdk mindrove` swaps the import and
+nothing else:
+
+```bash
+pip install mindrove
+python producer.py --sdk mindrove --board SYNTHETIC_BOARD --kind eeg --seconds 20 --out out/mr-eeg
+```
+
+Measured 2026-08-01, `mindrove` 5.3.0, `SYNTHETIC_BOARD`: 16 ch @ 250 Hz, dim
+80 — **CONFORMANT, 19 pass, 0 fail, 1 warn**, the same warning as above.
+
+Every identifying string in the descriptor names the SDK that actually ran
+(`vendor: akasara-mindrove`, `firmware: producer-0.1.0/mindrove-5.3.0`,
+`akasara.mindrove_board`), and a test asserts the word *brainflow* never appears
+in a MindRove capture. A synthetic session through a vendor's SDK is evidence
+about the API, not about their hardware, and the file is not allowed to blur
+those.
 
 ## Real hardware
 

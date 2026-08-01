@@ -156,7 +156,7 @@ about §7.*
 
 ## Summary
 
-All 54 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
+All 57 requirement identifiers in `ASE-0.1.md` appear above exactly once, plus
 one row for Appendix A.
 
 | | Count |

@@ -23,9 +23,19 @@ end-to-end; only the electrodes are absent. Synthetic sessions are labelled
 `akasara.source: simulated` in the descriptor and can never be mistaken for a
 capture.
 
+VENDOR SDKs THAT ARE BRAINFLOW IN ALL BUT NAME. Some vendors ship their own
+Python package rather than upstreaming a board. MindRove's `mindrove` is a
+rename-level fork of BrainFlow's binding: same `BoardShim`, same `BoardIds`,
+the same method names and signatures down to the `preset` default, and its own
+`SYNTHETIC_BOARD`. `--sdk mindrove` swaps the import and nothing else, so those
+vendors get an ASE producer on the same terms as the 64 in BrainFlow. Every
+string this file writes into a capability descriptor names the SDK it actually
+used, because a capture from one must never claim to be a capture from the other.
+
 Usage:
   python producer.py --board SYNTHETIC_BOARD --kind eeg --seconds 20 --out out/synth
   python producer.py --board CYTON_BOARD --serial-port COM3 --kind eeg --out out/cyton
+  python producer.py --sdk mindrove --board MINDROVE_WIFI_BOARD --kind eeg --out out/arc
   python producer.py --list-boards
 """
 
@@ -43,6 +53,62 @@ import tdfeat                                                   # noqa: E402
 
 PRODUCER_VERSION = "0.1.0"
 DOC_URL = "https://github.com/breadMSA/Akasara/blob/main/apps/brainflow/README.md"
+
+
+# ----------------------------------------------------------------- the SDK
+class Sdk:
+    """Which acquisition binding to import, and what to call it in the output.
+
+    BrainFlow and the vendor forks of it are the same API under two names. The
+    ONE thing that must not be shared is the label: a descriptor produced
+    through MindRove's SDK says mindrove, so nobody can read a synthetic
+    BrainFlow session as evidence about a MindRove board or the reverse.
+    """
+
+    KNOWN = {
+        "brainflow": ("brainflow.board_shim", "BrainFlowInputParams", "BrainFlow"),
+        "mindrove": ("mindrove.board_shim", "MindRoveInputParams", "MindRove SDK"),
+    }
+
+    def __init__(self, key):
+        if key not in self.KNOWN:
+            raise SystemExit(f"unknown --sdk {key!r}; "
+                             f"one of {', '.join(sorted(self.KNOWN))}")
+        mod_name, params_name, label = self.KNOWN[key]
+        self.key, self.label, self.dist = key, label, key
+        try:
+            import importlib
+            self.mod = importlib.import_module(mod_name)
+        except ImportError as e:                                  # noqa: BLE001
+            raise SystemExit(f"--sdk {key} needs `pip install {key}` ({e})")
+        self.BoardShim = self.mod.BoardShim
+        self.BoardIds = self.mod.BoardIds
+        self.InputParams = getattr(self.mod, params_name)
+
+    def version(self):
+        try:
+            from importlib.metadata import version
+            return version(self.dist)
+        except Exception:                                         # noqa: BLE001
+            return "unknown"
+
+
+class _DefaultSdk:
+    """Stands in until `--sdk` is parsed, then imports BrainFlow on first touch.
+
+    The import stays lazy so that someone who installed only a vendor fork gets
+    the `--sdk` error, not a missing-brainflow traceback.
+    """
+
+    _real = None
+
+    def __getattr__(self, name):
+        if _DefaultSdk._real is None:
+            _DefaultSdk._real = Sdk("brainflow")
+        return getattr(_DefaultSdk._real, name)
+
+
+SDK = _DefaultSdk()             # replaced by main(); every writer below reads it
 
 # The 10-20 label set, upper-cased. A board is treated as carrying a standard
 # montage only if EVERY channel it publishes is in here — a board that names
@@ -96,10 +162,10 @@ class Board:
     """
 
     def __init__(self, board_name, params, kind=None, mains_hz=50.0):
-        from brainflow.board_shim import BoardShim, BoardIds
+        BoardShim, BoardIds = SDK.BoardShim, SDK.BoardIds
 
         if not hasattr(BoardIds, board_name):
-            raise SystemExit(f"unknown BrainFlow board {board_name!r}; "
+            raise SystemExit(f"unknown {SDK.label} board {board_name!r}; "
                              "run --list-boards")
         self.board_name = board_name
         self.board_id = getattr(BoardIds, board_name)
@@ -169,7 +235,7 @@ class Board:
                 "arrangement": "scattered",
                 # BrainFlow does not report the reference. Saying so is the point
                 # of R-4.2 asking for the field at all.
-                "reference": "unspecified-by-brainflow",
+                "reference": f"unspecified-by-{SDK.key}",
                 "positions": [{"ch": i, "label": n}
                               for i, n in enumerate(self.names)],
             }
@@ -178,10 +244,10 @@ class Board:
             "site": "unspecified",
             "side": "n/a",
             "arrangement": "single",
-            "reference": "unspecified-by-brainflow",
+            "reference": f"unspecified-by-{SDK.key}",
             # R-4.2.1: identical across units whose arrangement is
             # interchangeable. Two units of the same board model are.
-            "geometry_id": f"brainflow.{self.descr.get('name', self.board_name)}.v1",
+            "geometry_id": f"{SDK.key}.{self.descr.get('name', self.board_name)}.v1",
         }
         if self.names:
             m["akasara.partial_labels"] = self.names
@@ -220,8 +286,7 @@ class Board:
 
     # ------------------------------------------------------------ session
     def __enter__(self):
-        from brainflow.board_shim import BoardShim
-        self._shim = BoardShim(self.board_id, self.params)
+        self._shim = SDK.BoardShim(self.board_id, self.params)
         self._shim.prepare_session()
         self._shim.start_stream()
         return self
@@ -238,7 +303,7 @@ class Board:
     def read(self, seconds):
         """Collect `seconds` of data, returning (T, C) plus the board's own
         timestamps in Unix seconds."""
-        from brainflow.board_shim import BoardShim
+        BoardShim = SDK.BoardShim
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
@@ -364,12 +429,12 @@ def build_capability(board, scale, transport, n_frames):
 
     cap = {
         "ase_version": "0.1",
-        "vendor": "akasara-brainflow",
+        "vendor": f"akasara-{SDK.key}",
         "model": f"{board.descr.get('name', board.board_name)}-{board.kind}",
-        "firmware": f"producer-{PRODUCER_VERSION}/brainflow-{_brainflow_version()}",
+        "firmware": f"producer-{PRODUCER_VERSION}/{SDK.key}-{SDK.version()}",
         # Never omitted, never ambiguous: a synthetic session is labelled as one.
-        "akasara.source": "simulated" if board.is_synthetic else "device-brainflow",
-        "akasara.brainflow_board": board.board_name,
+        "akasara.source": "simulated" if board.is_synthetic else f"device-{SDK.key}",
+        f"akasara.{SDK.key}_board": board.board_name,
         "tiers": ["t1"],
         "profiles": [],
         "signal": {
@@ -394,7 +459,7 @@ def build_capability(board, scale, transport, n_frames):
             "latency_max_ms": round(prof["window_ms"] + prof["stride_ms"] + max_ms, 3),
             "akasara.transform_latency_ms": {"typ": typ_ms, "max": max_ms},
             "akasara.latency_excludes":
-                "the board's own acquisition and link latency, which BrainFlow "
+                f"the board's own acquisition and link latency, which {SDK.label} "
                 "does not expose; these figures cover this producer only",
             "akasara.full_scale": scale,
             "akasara.full_scale_basis":
@@ -408,7 +473,7 @@ def build_capability(board, scale, transport, n_frames):
             # value exceeds JSON's exact integer range (R-5.2).
             "rtc": True,
             "mono_epoch": "session",
-            "akasara.clock_basis": "BrainFlow timestamp channel, host wall clock",
+            "akasara.clock_basis": f"{SDK.label} timestamp channel, host wall clock",
         },
         "selftest": {
             "input": "ase.selftest.v1",
@@ -448,17 +513,9 @@ def build_capability(board, scale, transport, n_frames):
     return cap
 
 
-def _brainflow_version():
-    try:
-        from importlib.metadata import version
-        return version("brainflow")
-    except Exception:                                           # noqa: BLE001
-        return "unknown"
-
-
 # -------------------------------------------------------------------- main
 def list_boards():
-    from brainflow.board_shim import BoardShim, BoardIds
+    BoardShim, BoardIds = SDK.BoardShim, SDK.BoardIds
     rows = []
     for name in sorted(n for n in dir(BoardIds) if n.endswith("_BOARD")):
         try:
@@ -468,8 +525,8 @@ def list_boards():
         rows.append((name, d.get("name", "?"), d.get("sampling_rate"),
                      len(d.get("eeg_channels") or []),
                      len(d.get("emg_channels") or [])))
-    print(f"{len(rows)} boards known to BrainFlow "
-          f"{_brainflow_version()}; each one is a potential ASE producer\n")
+    print(f"{len(rows)} boards known to {SDK.label} "
+          f"{SDK.version()}; each one is a potential ASE producer\n")
     print(f"{'BOARD':34} {'NAME':18} {'RATE':>6} {'EEG':>4} {'EMG':>4}")
     for name, nice, rate, eeg, emg in rows:
         print(f"{name:34} {nice:18} {str(rate):>6} {eeg:>4} {emg:>4}")
@@ -479,6 +536,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list-boards", action="store_true")
+    ap.add_argument("--sdk", default="brainflow", choices=sorted(Sdk.KNOWN),
+                    help="acquisition binding; vendor forks share BrainFlow's API")
     ap.add_argument("--board", default="SYNTHETIC_BOARD")
     ap.add_argument("--kind", choices=sorted(PROFILES),
                     help="required when the board's channel taxonomy is ambiguous")
@@ -496,6 +555,9 @@ def main():
     ap.add_argument("--transport-kbps", type=int, default=2000)
     args = ap.parse_args()
 
+    global SDK
+    SDK = Sdk(args.sdk)
+
     if args.list_boards:
         list_boards()
         return
@@ -503,8 +565,8 @@ def main():
     if not args.out:
         raise SystemExit("--out is required unless --list-boards")
 
-    from brainflow.board_shim import BrainFlowInputParams, BoardIds
-    params = BrainFlowInputParams()
+    BoardIds = SDK.BoardIds
+    params = SDK.InputParams()
     params.serial_port = args.serial_port
     params.mac_address = args.mac_address
     params.ip_address = args.ip_address
@@ -516,7 +578,7 @@ def main():
     board = Board(args.board, params, kind=args.kind,
                   mains_hz=args.mains_hz or 0.0)
 
-    session_id = f"bf-{int(time.time())}-{board.board_name.lower()}"
+    session_id = f"{SDK.key[:2]}-{int(time.time())}-{board.board_name.lower()}"
     with board as live:
         samples, stamps = live.read(args.seconds)
     if len(samples) == 0:
@@ -531,7 +593,7 @@ def main():
     need = json_bytes * rate_hz * 8 / 1000.0
     if need >= args.transport_kbps:
         raise SystemExit(f"declared transport cannot carry {need:.0f} kbps")
-    transport = [{"uri": "loopback://brainflow-producer",
+    transport = [{"uri": f"loopback://{SDK.key}-producer",
                   "encodings": ["json"],
                   "max_sustained_kbps": args.transport_kbps}]
 

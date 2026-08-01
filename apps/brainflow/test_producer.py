@@ -234,6 +234,44 @@ def _():
     assert callable(producer.list_boards)
 
 
+@test("a vendor fork of the BrainFlow API produces ASE, and says which SDK it was")
+def _():
+    """MindRove ships `mindrove`, a rename-level fork of BrainFlow's binding.
+
+    Skipped rather than failed when it is not installed: the fork is an extra
+    reach claim, not a dependency of this producer. What must never happen is a
+    capture taken through one SDK describing itself as the other, so the two
+    things asserted are that the run is conformant and that every identifying
+    string in the descriptor names mindrove.
+    """
+    try:
+        import mindrove.board_shim                              # noqa: F401
+    except ImportError:
+        return
+    from producer import DOC_URL
+    with tempfile.TemporaryDirectory() as d:
+        out = os.path.join(d, "mr")
+        subprocess.run(
+            [sys.executable, os.path.join(HERE, "producer.py"),
+             "--sdk", "mindrove", "--board", "SYNTHETIC_BOARD",
+             "--kind", "eeg", "--seconds", "6", "--out", out],
+            check=True, capture_output=True)
+        cap = json.load(open(os.path.join(out, "capability.json"), encoding="utf-8"))
+        _, log = check(os.path.join(out, "capability.json"),
+                       os.path.join(out, "frames.jsonl"),
+                       os.path.join(out, "selftest.json"))
+        assert "CONFORMANT" in log, log[-400:]
+    assert cap["vendor"] == "akasara-mindrove", cap["vendor"]
+    assert cap["firmware"].split("/")[1].startswith("mindrove-"), cap["firmware"]
+    assert "akasara.mindrove_board" in cap
+    # Documentation URLs point at this producer's own path in the repository,
+    # which is apps/brainflow/ whichever SDK ran; everything else that says
+    # brainflow would be a false claim about where the signal came from.
+    blob = json.dumps({k: v for k, v in cap.items() if k != "documentation"})
+    blob = blob.replace(DOC_URL, "")
+    assert "brainflow" not in blob.lower(), "a MindRove capture named the wrong SDK"
+
+
 if __name__ == "__main__":
     print(f"BrainFlow producer tests (no hardware required)\n")
     # Definitions above run at import time via the decorator.
