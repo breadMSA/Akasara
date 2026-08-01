@@ -420,3 +420,37 @@ Requirement count: 53 -> 54.
   rather than noise.
 
 Requirement count: 54 -> 56.
+
+## 0.1 — 2026-08-01 (draft, unpublished) — §11.5 third knob, R-11.5.3
+
+- **The task moves the margin, and it moves it across zero.** THINGS-EEG2, 10
+  subjects, cross-user, space and pipeline held fixed while only the task
+  definition varies. The vector `apps/replay` exports ranges **−0.0169 to
+  +0.0126** and changes sign; the evoked-window space ranges +0.0005 to +0.1452.
+  Three sub-knobs: trial depth (how many repetitions an exported frame averages —
+  alone enough to move the exported vector from failing to clearing), decision
+  cardinality (2-way through 100-way), and cue-set selection.
+- **The exploitable direction is the hard task, not the easy one.** On the
+  exported vector the 2-way task *fails* (−0.0169, 1/10 subjects positive) and
+  the 100-way task passes. The channel-mean twin retains the coarse global
+  component, which wins easy discriminations; the richer space only earns its
+  keep where fine separation is required.
+- **Cue selection is a magnitude knob, not a sign knob.** Cues selected on a
+  donor half of the subjects and scored on the held-out half — generalising, not
+  circular — roughly double the evoked margin (+0.0842 against +0.0413), and on
+  the exported vector do not work at all: both selected sets fall below two
+  random draws.
+- **R-11.5.3** requires a published task to state its decision cardinality, its
+  trial depth, and how the cue set was chosen; cardinality and depth SHOULD be
+  the ones the product operates at.
+- **R-11.5 stays SHOULD permanently, and §11.5 now says why.** Knobs 1 and 2
+  were closed by disclosure. The task cannot be — every row in the new table is
+  disclosable and honest — and it cannot be fixed by specification without ASE
+  naming a transfer task and thereby naming a signal.
+- **Scorer defect caught before it reached this document.** The first
+  cardinality run reported a per-distractor win rate, which is identical for
+  every *k*; the tell was 2-way, 5-way and 20-way returning the same number. A
+  retrieval is a win only against *every* distractor. Nothing from that run
+  survived into the spec.
+
+Requirement count: 56 -> 57.

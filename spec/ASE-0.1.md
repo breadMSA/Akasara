@@ -1198,14 +1198,16 @@ Three things this settles, and one it does not:
   any stimulus, and a time-resolved space is the kind that loses most from that.
   Read +0.040 as an upper bound obtained under perfect alignment.
 
-**A fourth dataset, about the criterion rather than about any feature space.**
-CEMHSEY (§7's R-7.5.1 derivation, 6 subjects × 11 donnings) was run with the
-full 1280-d space against its own channel-mean 4-d reduction: identical samples,
-splits, subjects and pipeline in both arms, the only change being the reduction.
-Its transfer axis is within-user across days rather than cross-user, so this is
-**not** a fourth cross-user leg and no margin below should be compared with the
-three above. What it isolates is how much the *measurement* moves when things
-R-11.5 does not currently constrain are varied.
+**Three probes of the criterion itself, rather than of any feature space.** None
+of the numbers in this block is a fourth cross-user leg and none should be
+compared with the three legs above; what they isolate is how far the
+*measurement* moves when things R-11.5 does not constrain are varied. Probes 1
+and 2 use CEMHSEY (§7's R-7.5.1 derivation, 6 subjects × 11 donnings), run with
+the full 1280-d space against its own channel-mean 4-d reduction — identical
+samples, splits, subjects and pipeline in both arms, the only change being the
+reduction; its transfer axis is within-user across days. Probe 3 uses
+THINGS-EEG2 and is cross-user, but varies the task rather than the space, so its
+spread is a property of the criterion and its endpoints are not claims about EEG.
 
 **1. The margin is a function of the enrollment, not of the space alone.**
 
@@ -1239,6 +1241,66 @@ whose parameter count scales with the feature dimension penalises the richer
 space at small enrollment** — which is the floor-by-`dim` that R-11.5 already
 refuses, arriving through the back door and with its sign reversed.
 
+**3. The margin is a function of the task, and the task is the one thing R-11.5
+hands to the vendor outright.** Enrollment and pipeline are at least nameable.
+The task is not: ASE cannot name one without ceasing to be signal-agnostic. So
+the third knob was measured directly, on THINGS-EEG2 — 10 subjects, cross-user,
+200 shared cues, the same calibration-free ridge map and the same subject-level
+bootstrap as the leg above. The space is held fixed and *only the task
+definition* moves. Two spaces were run: `bandpower`, the vector
+`apps/replay` exports, and the evoked-window space that earns the +0.040 leg.
+
+| task knob | `bandpower` margin | evoked-window margin |
+| --- | --- | --- |
+| 1 repetition averaged per frame | −0.0001 *(fails)* | +0.0005 *(fails)* |
+| 4 repetitions | +0.0000 *(fails)* | +0.0024 |
+| 20 repetitions | −0.0005 *(fails)* | +0.0138 |
+| 80 repetitions | +0.0029 | +0.0410 |
+| 2-way decision | **−0.0169** *(fails, 1/10)* | +0.1148 |
+| 5-way | −0.0125 *(fails)* | +0.1452 |
+| 20-way | +0.0010 *(fails)* | +0.1002 |
+| 100-way | +0.0029 | +0.0410 |
+| cues chosen for accuracy on other subjects | +0.0075 | +0.0842 |
+| cues chosen against it | +0.0071 | +0.0413 |
+| cues drawn at random | +0.0126 | +0.0569 |
+
+Same space, same ten subjects, same pipeline: the exported vector's margin ranges
+−0.0169 to +0.0126 and **crosses zero**, and the evoked space's ranges +0.0005 to
++0.1452 — a factor of nearly 300, all of it from choices the clause leaves open.
+Three things follow, and the third is not the one to expect.
+
+- **Trial depth is a task choice, not a device property.** How many stimulus
+  repetitions an exported frame averages is set by the protocol; the electrodes,
+  the subject and the transform are untouched. It alone moves the exported
+  vector from failing to clearing.
+- **Cue selection is a magnitude knob, not a sign knob.** Selecting the cues on
+  a donor half of the subjects and reporting on the held-out half — an honest,
+  generalising selection, not circularity — roughly doubles the evoked margin
+  (+0.084 against +0.041). On the exported vector it does not work at all: both
+  selected sets land *below* two random draws, so the difficulty a donor subject
+  sees is not the difficulty a stranger sees.
+- **The exploitable direction is the hard task, not the easy one.** The
+  intuition that a vendor games this by picking something easy is backwards. On
+  the exported vector the 2-way task is where the criterion *fails* and the
+  100-way task is where it passes. The mechanism is plain once seen: the
+  channel-mean twin keeps the coarse global component, which is enough to win
+  easy discriminations, so the richer space's extra dimensions only earn their
+  keep where fine separation is required. A criterion of this shape rewards
+  reporting the hardest task the device can survive — which is a strange
+  incentive, but not a dishonest one.
+
+Read the `bandpower` rows for their sign, not their size: 0.0253 against a 0.01
+chance rate is near the floor this dataset can resolve, and a ±0.017 excursion
+there is a qualitative result about the criterion, not a calibrated effect.
+
+**This is the permanent reason R-11.5 stays SHOULD.** Knobs 1 and 2 were closed
+by requiring disclosure, because enrollment and pipeline can be stated. A task
+cannot be constrained by disclosure alone — every entry in the table above is
+disclosable and honest — and it cannot be constrained by specification either,
+without ASE naming a transfer task and thereby naming a signal. So the criterion
+is bounded from below by what a conscientious vendor will report, and that is the
+most a signal-agnostic floor can be.
+
 **Criterion, now normative at SHOULD level (was provisional and non-normative):**
 
 **R-11.5** A T1 feature space offered for cross-user use SHOULD beat the
@@ -1263,6 +1325,19 @@ identical in both arms. Where it contains a fitted step whose free parameters
 scale with the feature dimension, the margin MUST also be reported under a
 pipeline containing no such step. Identical pipelines in both arms is necessary
 and not sufficient: the inverted row in the table above had them.
+
+**R-11.5.3 (state the task, in the three places it is a choice).** "The task",
+which R-11.5 already obliges a vendor to publish, MUST include:
+
+- the **decision cardinality** — how many candidates each decision is among;
+- the **trial depth** — how many stimulus repetitions, trials or epochs are
+  averaged into each exported frame the task scores; and
+- **how the cue set was chosen**, and in particular whether it was selected using
+  any data, including data from other subjects.
+
+The cardinality and the trial depth SHOULD be the ones the product actually
+operates at. A margin reported at 80 averaged repetitions describes a device
+whose user repeats every intention eighty times.
 
 Honest limits. The three legs are 6 subjects / 30 pairs (DB5), 6 subjects / 30
 pairs (Hyser), and 33 subjects / 66 pairs (EEG). In none of them are the pairs
