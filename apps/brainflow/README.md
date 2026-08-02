@@ -1,6 +1,6 @@
 # BrainFlow → ASE producer
 
-**64 boards become ASE producers by running one file at them.**
+**62 boards become ASE producers by running one file at them.**
 
 BrainFlow is one acquisition API in front of the small-vendor biosignal fleet:
 OpenBCI Cyton/Ganglion, Muse, Neurosity Crown, BrainBit, g.tec Unicorn, OYMotion
