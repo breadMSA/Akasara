@@ -1,8 +1,9 @@
 """ASE-0.1 producer backed by BrainFlow — the third implementation.
 
 Why this file is the cheapest thing in the repository per unit of reach.
-BrainFlow is one acquisition API in front of 64 boards (counted, 5.22.2, by
-asking it): OpenBCI Cyton and
+BrainFlow is one acquisition API in front of 62 boards (counted by asking it:
+5.22.2 exposes 66 board ids, minus the four that are not hardware — NO_BOARD,
+SYNTHETIC, PLAYBACK, STREAMING): OpenBCI Cyton and
 Ganglion, Muse, Neurosity Crown, BrainBit, g.tec Unicorn, OYMotion gForce
 (sEMG), Ant Neuro, Mentalab, EmotiBit, FreeEEG32, PiEEG. A device that speaks
 BrainFlow therefore becomes an ASE producer by running this file at it, without
@@ -52,7 +53,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 import tdfeat                                                   # noqa: E402
 
 PRODUCER_VERSION = "0.1.0"
-DOC_URL = "https://github.com/breadMSA/Akasara/blob/main/apps/brainflow/README.md"
+DOC_URL = "https://github.com/breadMSA/Akasara/blob/spec/ase-0.1/apps/brainflow/README.md"
 
 
 # ----------------------------------------------------------------- the SDK

@@ -14,3 +14,6 @@ apps/replay/out/
 
 # brainflow captures — reproducible in one command, no reason to carry them
 apps/brainflow/out/
+
+# stray capture output at the repo root — same reason
+/out/
