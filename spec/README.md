@@ -44,8 +44,9 @@ Most of it is free — T1 values already exist in the pipeline, and sequence
 numbers, session ids and `quality` are bookkeeping. Two clauses cost real work:
 the self-test path (R-5.7, days) and keeping the previous feature space
 obtainable after a change (R-7.5.1, satisfiable with a downgrade image rather
-than two live pipelines). §1.1 answers the three objections a vendor actually
-raises: privacy liability, competitor cloning, and SDK gating.
+than two live pipelines). §1.2 answers the three objections a vendor actually
+raises: privacy liability, competitor cloning, and SDK gating; §1.1 covers the
+case where the recogniser's output is text rather than a gesture label.
 
 ## Running the suite
 

@@ -73,8 +73,10 @@ corrected in 0.2.
 Every body-signal device internally passes through the same stages:
 
 ```
- sensor → filtered stream → feature/latent vector → classifier → discrete event
-   T3          T2                   T1                              T0
+ sensor → filtered stream → feature/latent vector → recogniser → discrete event
+   T3          T2                   T1                   │              T0
+                                                         └───────────→ text
+                                                                        T0
 ```
 
 Current consumer practice is to export **T0 only**: raw signal stays on the
@@ -98,7 +100,42 @@ T1-level frames. Re-run on T0 event streams it does not exist to be run.
 So T1 is not "more data". T1 is the lowest tier at which anyone other than the
 device vendor can build anything.
 
-### 1.1 What this costs a vendor, and the three real objections
+### 1.1 The T0 of a language interface is text
+
+Non-normative. The diagram above ends at a label set, which is the right picture
+for a device whose output vocabulary the vendor can enumerate: a few dozen
+gestures, a cursor, a click. A device that decodes language cannot enumerate its
+output vocabulary — and does not have to, because language enumerates it.
+Published non-invasive work already terminates there rather than at a gesture
+label: Meta's Brain2Qwerty decodes MEG and EEG to keystrokes, and the artefact
+handed to the application is a string.
+
+Text is therefore the T0 of a language interface, and it is a harder case than a
+gesture label in three ways.
+
+- **It looks like full fidelity.** A user who receives the sentence they were
+  thinking does not experience a loss, and a regulator reading the export policy
+  does not see one. The usual complaint that drives demand for a higher tier —
+  "the device won't give me what I meant" — does not arise.
+- **It is unbounded**, so the argument that a fixed label set cannot cover what
+  the user needs, which is available against a gesture taxonomy, is not
+  available here.
+- **It is a projection onto a *public* alphabet.** A vendor's label set is at
+  least idiosyncratic to that vendor. A shared human code whose entire function
+  is to mean the same thing across speakers removes between-person structure
+  more completely, not less. The geometry that distinguishes one person's
+  representation of a meaning from another's is not attenuated in a text export.
+  It is definitionally absent.
+
+The tier stack is unchanged: text is a recogniser output and is T0. What changes
+is how the reader should take §1's claim about current practice. A vendor can
+satisfy every intuition about user access, publish a considered export policy,
+and be praised for it, while exporting nothing above T0. R-3.2 applies to text
+exactly as to a gesture event — offered alongside T1, never instead of it — and
+R-3.2.2's `t1_seq` is what makes a decoded sentence falsifiable rather than
+something the user must take on faith.
+
+### 1.2 What this costs a vendor, and the three real objections
 
 Non-normative, and written for the person who has to approve this internally.
 
@@ -129,6 +166,34 @@ recognition feel good — which is where the work actually is. The spec never as
 for the model, the labels, or the training data. Weigh that exposure against the
 alternative: the closed platforms will not interoperate with you, and a device
 whose data cannot leave it cannot participate in any layer above it.
+
+That answer is written for a recogniser over a closed label set, and it does not
+transfer unmodified to a device that decodes language. There the asset is not the
+classifier — it is the paired corpus of signal against meaning, and the exposure
+from T1 export is correspondingly larger, because a third party can accumulate
+such a corpus on your hardware. A vendor in that position is right to say the
+previous paragraph understates their case. Three things still bound it, and they
+should be checked rather than assumed:
+
+- **What leaves is one subject's stream, at that subject's request.** The moat in
+  a paired corpus is population scale, and §7 exports nothing at population
+  scale. A competitor building a corpus this way acquires subjects one at a time,
+  each individually consenting, on the incumbent's hardware — a worse channel
+  than the ones already open to them.
+- **R-5.5 helps the vendor here**, which is not its stated purpose but is a real
+  effect. It obliges a device applying per-user adaptation to declare it and to
+  offer a mode in which exported T1 is non-adaptive. A vendor who does not want
+  the fit to this subject leaving the device therefore has a conformant way to
+  keep it: export the non-adaptive space. The generic feature space leaves; the
+  personalisation need not. Note the limit — R-5.5 makes that mode *available*,
+  it does not make it the default, and R-5.5.1 exists precisely because some
+  pipelines cannot switch the adaptation off at all.
+- **The labels do not leave at all.** A signal stream without the meaning it was
+  paired with is not a corpus. Whoever receives the export must supply their own
+  ground truth, per subject — the same cost the vendor paid, not a copy of it.
+
+What remains after those three is a genuine residual exposure that this document
+does not eliminate and does not pretend to.
 
 **Objection 3 — "we want an SDK programme / app review."** R-7.3 forbids
 *vendor* approval of the developer. It does not forbid a **user** consent
@@ -595,7 +660,7 @@ transport that can carry it is.
 the user to software of the user's choice. A conformant device MUST NOT restrict
 T1 export to an approved-developer programme, a signed application list, or an
 app store. Per-application consent, revocation, and audit logging under the
-user's control are explicitly permitted (see §1.1, objection 3).
+user's control are explicitly permitted (see §1.2, objection 3).
 
 **R-7.4 (no cross-user restriction).** The device's terms MUST NOT prohibit the
 user, or software acting for the user, from processing exported frames jointly

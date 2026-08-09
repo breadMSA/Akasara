@@ -74,8 +74,8 @@ yours.
 ## Why T1 specifically, and not T0
 
 Every body-signal device passes through the same stages: sensor → filtered
-stream → feature vector → classifier → discrete event. Current consumer practice
-is to export the last one only.
+stream → feature vector → recogniser → discrete event, or → text. Current
+consumer practice is to export the last stage only.
 
 The consequence is rarely stated: **T0 is not a lossy version of the signal, it
 is a different object** (§1). A discrete event is a projection onto your fixed
@@ -88,6 +88,15 @@ does not exist to be run.
 
 So T1 is not "more data". It is the lowest tier at which anyone other than you
 can build anything.
+
+If your recogniser emits text rather than a gesture label, this still applies to
+you and is easier to miss. Text is a recogniser output, so it is T0, and it is
+the more complete projection of the two — a public alphabet built to mean the
+same thing across speakers removes between-person structure that even your own
+private label set retains. You can ship a considered export policy, be praised
+for it, and still be exporting nothing above T0. §1.1 sets this out; §1.2's
+objection 2 addresses the sharper commercial exposure that a language decoder
+faces, because there the asset is the paired corpus rather than the classifier.
 
 ## What you get
 

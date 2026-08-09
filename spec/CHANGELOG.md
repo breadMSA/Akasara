@@ -34,7 +34,7 @@ thing a later reader will want to see was caught rather than missed:
 - **R-7.5.1 relaxed.** "Selectable" became "obtainable", explicitly satisfiable
   by a downgrade image; two concurrently resident pipelines were never the
   intent and would have been the most expensive clause in the document.
-- **§1.1 added** to answer the three objections a vendor actually raises
+- **§1.1 added** (renumbered to §1.2 on 2026-08-09) to answer the three objections a vendor actually raises
   (liability, competitor cloning, SDK gating) instead of only asserting the
   user-side value.
 - **R-8.1 added:** Core conformance is unconditional and never contingent on the
@@ -458,3 +458,34 @@ Requirement count: 54 -> 56.
   survived into the spec.
 
 Requirement count: 56 -> 57.
+
+## 0.1 — 2026-08-09 (draft, unpublished) — the language-decoder case
+
+Non-normative throughout. No requirement is added, removed, or reworded.
+
+- **§1.1 added: "The T0 of a language interface is text".** The stage diagram
+  ended at a label set, which is only correct for a device whose output
+  vocabulary the vendor can enumerate. A device that decodes language terminates
+  at a string instead — the published non-invasive work already does — and text
+  is a recogniser output, therefore T0. It is the harder case: it looks like full
+  fidelity to both the user and the regulator, it is unbounded so the
+  "your taxonomy is too small" argument is unavailable, and being a projection
+  onto a *public* alphabet it removes between-person geometry more completely
+  than a vendor's private label set does. §1's claim about current practice
+  should be read as covering it.
+- **§1.2 objection 2 amended.** The existing answer — T1 does not give away the
+  classifier, the taxonomy, the corpus, or the tuning — was written for a
+  recogniser over a closed label set and does not transfer to a language
+  decoder, where the asset *is* the paired corpus and T1 export does help a third
+  party accumulate one. Rather than restate the old answer more loudly, the
+  section now concedes the point and bounds it three ways: exports are
+  per-subject and never at population scale, R-5.5's non-adaptive mode gives a
+  vendor a conformant way to keep the personalisation on the device, and labels
+  never leave, so a recipient still pays the ground-truth cost per subject. A
+  residual exposure remains and is stated as remaining.
+- **Old §1.1 renumbered to §1.2.** Cross-reference in §7 and in `README.md`
+  updated. Section numbers are not requirement identifiers; §13.2's no-renumber
+  rule binds R-numbers, and none moved.
+- **VENDOR-BRIEF stage line and "Why T1 specifically" updated** to match.
+
+Requirement count: 57 -> 57.
