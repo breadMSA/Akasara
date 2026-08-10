@@ -7,6 +7,16 @@ Not a design blueprint. It specifies what must come out of the box and under
 what terms — no electrodes, radios, enclosures, or algorithms. A vendor changes
 no hardware to conform.
 
+**Why the tier floor is the load-bearing requirement** is argued separately, as a
+citable paper:
+
+> Lin, X.-J. (2026). *Export Tiers for Body-Signal Devices: Why a
+> Recognised-Event Interface Cannot Support Cross-Person, Cross-Vendor, or
+> Evidentiary Use.* Zenodo. https://doi.org/10.5281/zenodo.21869421
+
+Source at [`paper/ase-tier-floor.md`](paper/ase-tier-floor.md). Cite the DOI
+rather than this repository where a citation is expected.
+
 | File | What it is |
 | --- | --- |
 | [`ASE-0.1.md`](ASE-0.1.md) | The specification. |

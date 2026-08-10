@@ -98,15 +98,53 @@ for it, and still be exporting nothing above T0. §1.1 sets this out; §1.2's
 objection 2 addresses the sharper commercial exposure that a language decoder
 faces, because there the asset is the paired corpus rather than the classifier.
 
+## The cross-vendor slot, and why it exists only above T0
+
+There is a commercial argument here that is easy to state badly, so it is worth
+stating carefully — including the half of it that does not work.
+
+**The version that does not work.** "Two large platforms will not interoperate,
+so a neutral device that reads both becomes the only one whose user can reach
+everybody." As a pitch about *today's* export, this is empty. When the exported
+artefact is a recognised event or a string of text, it is already a universal
+type: text crosses every platform, and has for forty years. Bridging two such
+exports is trivial, which is exactly why it is worth nothing. The lock-in that
+remains at that layer is application lock-in, and the platform owners have
+historically dissolved that themselves once it stopped protecting anything they
+cared about — that is what happened in smart home.
+
+**The version that works.** The exchanges worth bridging are the ones that
+cannot be flattened into a shared public vocabulary without becoming a different
+thing: a representation of state or intent richer than the words it would
+otherwise be reduced to, moving between two devices or two people. Those exist
+only at T1 and above. So:
+
+> The value of cross-vendor interoperation is an increasing function of the
+> export tier. At T0 it is trivial and worthless. The case where it is worth
+> money is precisely the case a T0-only interface forecloses.
+
+**Why this matters to you specifically.** A closed platform interoperates with
+itself and with nobody else, and both of the large ones have set their consumer
+export at T0 by architecture. That leaves the cross-vendor slot structurally
+empty and it will stay empty, because it cannot be entered from a T0 export at
+any budget. It can only be entered by devices whose data can leave them at a
+tier that retains the signal's geometry.
+
+This is not a promise that the slot will be valuable on a particular date; it
+depends on consumer read hardware arriving, which is outside anyone's control
+here. It is a statement about who is *eligible* if it becomes valuable. The
+eligibility costs an output path and a terms clause, and is claimable now.
+
+The argument is set out in full, with its evidentiary and research corollaries,
+in `spec/paper/ase-tier-floor.md`.
+
 ## What you get
 
 - A user-facing answer to "can I get my own data out", with a version number
   attached instead of a promise.
 - Position on the side the regulatory current is already running (Objection 1).
-- Access to whatever gets built above the layer. A closed platform will
-  interoperate with itself and with no one else; that leaves the cross-vendor
-  slot structurally empty, and only devices whose data can leave them can
-  occupy it.
+- Eligibility for the cross-vendor slot described above — which no T0-only
+  device can hold, whatever it spends.
 - No fee, no membership, no dependency on us.
 
 ## How you claim it

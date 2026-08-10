@@ -1,0 +1,159 @@
+HOW TO TURN spec/paper/ase-tier-floor.md INTO A CITABLE DOI
+===========================================================
+Time: about 15 minutes. Cost: 0. No review, no endorsement, no waiting.
+
+WHY ZENODO AND NOT ARXIV
+------------------------
+arXiv requires an endorsement from an existing author in the category before a
+first-time submitter can post to q-bio or cs. That is a person you would have to
+find and ask, and it can take weeks or never happen.
+
+Zenodo (run by CERN) issues a DOI immediately, with no review. A DOI is the only
+citation currency that both a standards committee and a court-appointed expert
+recognise. Post to Zenodo now; arXiv later if an endorser ever appears, and
+cross-reference the DOI when you do.
+
+
+STEP 1 — MAKE THE PDF (on your PC)
+----------------------------------
+The file is Markdown. Zenodo will accept the .md, but a PDF is what people
+actually open, so upload both.
+
+Easiest route with no new software: open the .md in VS Code, install the
+"Markdown PDF" extension, right-click in the file, choose "Markdown PDF: Export
+(pdf)". It writes ase-tier-floor.pdf next to the .md.
+
+If you would rather not install anything: paste the Markdown into
+https://dillinger.io and use its Export as PDF.
+
+
+STEP 2 — CREATE THE RECORD
+--------------------------
+1. Go to https://zenodo.org and sign in (you can log in with GitHub).
+2. Click "New upload".
+3. Drag in BOTH files: ase-tier-floor.pdf and ase-tier-floor.md
+
+
+STEP 3 — FILL THE METADATA, EXACTLY AS BELOW
+--------------------------------------------
+Copy these values verbatim. Nothing here needs a decision from you.
+
+Digital Object Identifier:
+    Choose  ->  "No, I need one"
+
+    The default selection is "Yes, I already have one", which is for people
+    re-depositing something that was already published elsewhere. You do not
+    have a DOI. Pick "No, I need one" and leave the box empty; Zenodo mints the
+    DOI when you press Publish. If you pick "Yes" and leave it blank the form
+    will not submit.
+
+Resource type:
+    Publication  ->  Preprint
+
+Title:
+    Export Tiers for Body-Signal Devices: Why a Recognised-Event Interface
+    Cannot Support Cross-Person, Cross-Vendor, or Evidentiary Use
+
+Publication date:
+    2026-08-10
+
+Creators:
+    Family name:   Lin
+    Given names:   Xian-Jun (羨鈞)
+    Affiliation:   Akasara
+
+    ROMANISED, NOT 林羨鈞 IN CHARACTERS. The paper is in English; an
+    all-characters author name breaks the metadata that DataCite, Google Scholar
+    and reference managers build the citation from, and the two audiences this
+    deposit exists for — a standards secretariat and a legal expert — both index
+    Latin script. Putting the characters in brackets after the given name is
+    normal practice and keeps both.
+
+    WHICH ROMANISATION — read this before you type:
+
+    *** If you already hold a passport, use EXACTLY the spelling printed on it,
+    even if it differs from what is below. Nothing else matters as much as
+    matching your legal documents, because the next things to carry this name
+    are contracts and a standards submission. ***
+
+    If you do not have one yet, Taiwan's 中文譯音使用原則 makes 漢語拼音 the
+    default and 外交部領事事務局 encourages it for passports (it is encouraged,
+    not mandatory). In 漢語拼音, 林羨鈞 is:
+
+        LIN, XIAN-JUN          <- use this one
+
+    The other systems, so you recognise them if you meet them later:
+        威妥瑪 (Wade-Giles)     LIN, HSIEN-CHUN
+        通用拼音                LIN, SIAN-JYUN
+
+    Reference: https://www.boca.gov.tw/cp-2-4226-c0eff-1.html
+
+    GET AN ORCID FIRST — 2 minutes, free, https://orcid.org
+    This matters more than which romanisation you pick. An ORCID is a permanent
+    identifier that binds every future paper, comment and deposit to the same
+    person regardless of spelling, transliteration or name order — and "Lin" is
+    one of the most common family names on earth, so without one your work will
+    not stay distinguishable. Create it, then paste it into the Creators block
+    here. You can also add it to the record later without changing the DOI, but
+    doing it now is cleaner.
+    (Add an ORCID if you have one. If you do not, skip it — it is optional, and
+    you can add it to the record later without changing the DOI. Getting one is
+    free at https://orcid.org and takes two minutes; it is worth doing because
+    it makes later citations resolve to you rather than to a string.)
+
+Description:
+    Paste the whole Abstract section from the paper (from "Consumer body-signal
+    devices" down to "...stated independently of the requirements text.").
+
+Licence:
+    Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Keywords (add one at a time):
+    brain-computer interface
+    biosignal
+    data portability
+    neural data
+    interoperability
+    forensic evidence
+    standardisation
+
+Related works  ->  "is supplemented by"  ->  URL:
+    https://github.com/breadMSA/Akasara/tree/spec/ase-0.1/spec
+
+Version:
+    1.0
+
+
+STEP 4 — PUBLISH
+----------------
+Click Publish. The DOI appears immediately, in the form 10.5281/zenodo.XXXXXXX.
+
+Zenodo gives you TWO DOIs:
+  - a CONCEPT DOI that always points at the newest version
+  - a VERSION DOI that points at exactly this version
+
+Cite the CONCEPT DOI everywhere. It survives revisions.
+
+
+STEP 5 — WIRE IT BACK IN (tell me and I will do this part)
+----------------------------------------------------------
+Once you have the DOI, these three edits should follow:
+  - spec/README.md            : add "Cite this work: <concept DOI>"
+  - spec/ASE-0.1.md  section 0: reference the paper as the rationale document
+  - hub-explorer/outreach/04-pren-technical-comment.md : cite the DOI instead of
+                                the bare GitHub URL, because a standards comment
+                                that cites a DOI reads differently from one that
+                                cites a repository
+
+Also add the DOI to any future letter. "See github.com/..." and "See
+10.5281/zenodo..." are received very differently by a committee secretariat.
+
+
+WHAT THIS BUYS, PLAINLY
+-----------------------
+A permanent, indexed, third-party-hosted, timestamped statement of the argument
+that exists whether or not anyone answers an email. Outreach letters are a push
+channel and they have not worked. This is a pull channel: it is what is found by
+someone who goes looking at the moment they need it — a committee member
+drafting a clause, or a lawyer who has just been handed a neural-device record
+and needs to know whether it can be challenged.

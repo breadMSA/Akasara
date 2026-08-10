@@ -26,6 +26,17 @@ The one-line summary of the whole document:
 
 Everything else here is the detail needed to make that testable.
 
+The **rationale** for the tier floor — why a recognised-event interface forecloses
+cross-person, cross-vendor and evidentiary use rather than merely degrading them —
+is stated separately and citably in:
+
+> Lin, X.-J. (2026). *Export Tiers for Body-Signal Devices: Why a
+> Recognised-Event Interface Cannot Support Cross-Person, Cross-Vendor, or
+> Evidentiary Use.* Zenodo. https://doi.org/10.5281/zenodo.21869421
+
+That paper is argument only and normative force rests entirely with this
+document; §1 remains the non-normative summary for readers who want it inline.
+
 ### 0.1 Relationship to ISO/IEC TS 27571:2026
 
 There is an international committee in this field — **ISO/IEC JTC 1/SC 43,
